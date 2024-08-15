@@ -152,7 +152,9 @@ def import_geometry(scene, geometry, settings):
 		#
 		if N:
 			normals = [BlenderVector(no).normalized() for no in N]
-			mesh.use_auto_smooth = True
+			if bpy.app.version < (4, 1, 0):
+				# in blender 4.1 this property has been removed
+				mesh.use_auto_smooth = True
 			mesh.normals_split_custom_set_from_vertices(normals)
 
 		# texture coords

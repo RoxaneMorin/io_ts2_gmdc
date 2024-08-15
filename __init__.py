@@ -1,5 +1,6 @@
 #-------------------------------------------------------------------------------
-# Copyright (C) 2021  DjAlex88 (https://github.com/djalex88/)
+# Original work: Copyright (C) 2021  DjAlex88 (https://github.com/djalex88/)
+# Modified work: Copyright (C) 2024  Cosmatevs (https://github.com/Cosmatevs/)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -23,8 +24,8 @@
 bl_info = {
 	"name": "TS2 GMDC Importer/Exporter",
 	"description": "Import-Export TS2 GMDC, Import skeleton from CRES.",
-	"author": "DjAlex88 (https://github.com/djalex88/)",
-	"version": (0, 91, 2),
+	"author": "DjAlex88 (https://github.com/djalex88/), Cosmatevs",
+	"version": (0, 91, 3),
 	"blender": (2, 80, 0),
 	"location": "File > Import > Import TS2 GMDC (.5gd, .gmdc)",
 	"category": "Import-Export",

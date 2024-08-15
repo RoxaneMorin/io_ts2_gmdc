@@ -229,7 +229,9 @@ def export_geometry(scene, settings):
 
 		# mesh normals (possibly custom normals)
 		#
-		mesh.calc_normals_split()
+		if bpy.app.version < (4, 1, 0):
+			# in blender 4.1+ this function has been removed and normals are always calculated
+			mesh.calc_normals_split()
 		mesh_normals = []
 		for tri in mesh.loop_triangles:
 			tri_norm = []
@@ -241,8 +243,11 @@ def export_geometry(scene, settings):
 		#
 		mesh_tex_coords = []
 		if not mesh.uv_layers:
-			error( 'Error! Mesh object has no UV layer.' )
-			return False
+			if settings['export_tangents']:
+				error( 'Error! Mesh object has no UV layer. It is required for tangents.' )
+				return False
+			else:
+				mesh_tex_coords = repeat((None, None, None)) # no texture coords
 		elif len(mesh.uv_layers) == 1:
 			uv_layer1 = mesh.uv_layers[0]
 			for tri in mesh.loop_triangles:
@@ -408,7 +413,10 @@ def export_geometry(scene, settings):
 
 				if morphing == 2:
 					# calc normals for this shape
-					mesh.calc_normals_split()
+					if bpy.app.version < (4, 1, 0):
+						# in blender 4.1+ this function has been removed and normals are always calculated
+						mesh.calc_normals_split()
+					
 					mesh_normals = []
 					for tri in mesh.loop_triangles:
 						tri_norm = []
@@ -538,11 +546,13 @@ def export_geometry(scene, settings):
 		V, N, T, B, W, X, K, dV, dN = [*map(list, zip(*unique_verts))] + [None for i in range(3-2*morphing)]
 
 		# separate uv layers (if needed)
-		if len(mesh.uv_layers) > 1:
-			T1, T2 = zip(*T)
-		else:
+		if not mesh.uv_layers:
+			T1, T2 = None, None
+		elif len(mesh.uv_layers) == 1:
 			T1 = T
 			T2 = None
+		else:
+			T1, T2 = zip(*T)
 
 		del unique_verts, T
 
@@ -561,8 +571,9 @@ def export_geometry(scene, settings):
 				b2 = sum(bool(x) for x in g.dVerts) == len(dV[0]) # same number of difference arrays
 			else:
 				b2 = not bool(g.dVerts[0]) # no difference arrays
-			b3 = (bool(g.tex_coords2) == bool(T2)) # presence of additional UV layer
-			if b1 and b2 and b3:
+			b3 = (bool(g.tex_coords) == bool(T1)) # presence of UV layer
+			b4 = (bool(g.tex_coords2) == bool(T2)) # presence of additional UV layer
+			if b1 and b2 and b3 and b4:
 				# found
 				ref_group, group = i, g
 				break
@@ -579,7 +590,8 @@ def export_geometry(scene, settings):
 		#
 		group.vertices.extend(V)
 		group.normals.extend(N)
-		group.tex_coords.extend(T1)
+		if T1:
+			group.tex_coords.extend(T1)
 		if T2:
 			group.tex_coords2.extend(T2)
 		if rigging:
