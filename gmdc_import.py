@@ -32,7 +32,8 @@ from .gmdc_tools import (
 	load_resource,
 	Vector,
 	Transform,
-	build_transform_tree
+	build_transform_tree,
+	convert_normal_to_color
 	)
 
 def popup_message(title, message, icon='NONE'):
@@ -135,11 +136,6 @@ def begin_import(filename, scene, settings):
 #---------------------------------------
 
 def import_geometry(scene, geometry, settings):
-
-	# TODO: move somewhere it can be used by menu tools also.
-	def convert_normal_to_color(normal: tuple[float, float, float]) -> list[float]:
-		return [(f + 1)/2 for f in normal] + [1.0]
-
 
 	def create_mesh(name, V, N, I, T1, T2):
 
