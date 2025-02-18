@@ -136,6 +136,11 @@ def begin_import(filename, scene, settings):
 
 def import_geometry(scene, geometry, settings):
 
+	# TODO: move somewhere it can be used by menu tools also.
+	def convert_normal_to_color(normal: tuple[float, float, float]) -> list[float]:
+		return [(f + 1)/2 for f in normal] + [1.0]
+
+
 	def create_mesh(name, V, N, I, T1, T2):
 
 		# create mesh
@@ -290,11 +295,21 @@ def import_geometry(scene, geometry, settings):
 
 			keys = select_data(data_group.keys)
 			dV = list(map(select_data, data_group.dVerts))
+			dN = list(map(select_data, data_group.dNorms))
 
 			log( '\x20\x20--Length of dV: (%i, %i, %i, %i)' % tuple(map(len, dV)) )
+			log( '\x20\x20--Length of dN: (%i, %i, %i, %i)' % tuple(map(len, dN)) )
 
 			# basis
 			obj.shape_key_add(name="Basis")
+
+
+			# Prepare colour attributes, and save the base's normals there.
+			mesh = obj.data
+			mesh.color_attributes.new("Basis", 'FLOAT_COLOR', 'POINT')
+			basis_normals_as_colors = [value for sublist in map(convert_normal_to_color, N) for value in sublist]
+			mesh.color_attributes["Basis"].data.foreach_set('color_srgb', basis_normals_as_colors)
+
 
 			for morph_idx, name in enumerate(geometry.morph_names):
 
@@ -307,13 +322,24 @@ def import_geometry(scene, geometry, settings):
 
 					block_verts = obj.shape_key_add(name=name).data
 
-					# modify mesh with dV
+					# Create this morph's colour attributes.
+					mesh.color_attributes.new(name, 'FLOAT_COLOR', 'POINT')
+					mesh.color_attributes[name].data.foreach_set('color_srgb', basis_normals_as_colors)
+
+					# modify mesh with dV and dN
 					#
 					for i, key in used_keys:
 						j = key.index(morph_idx)
 						v = dV[j]
+						n = dN[j]
+
 						if v:
 							block_verts[i].co+= BlenderVector(v[i])
+
+							# Update the vertex's color attribute 
+							blended_normal = tuple(map(sum, zip(N[i], n[i])))
+							normal_as_color = convert_normal_to_color(blended_normal)
+							mesh.color_attributes[name].data[i].color_srgb = normal_as_color
 
 					del used_keys
 
