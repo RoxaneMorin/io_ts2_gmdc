@@ -300,11 +300,19 @@ def import_geometry(scene, geometry, settings):
 			obj.shape_key_add(name="Basis")
 
 
-			# Prepare colour attributes, and save the base's normals there.
+			# Save the source normals as vertex attributes and colours.
 			mesh = obj.data
-			mesh.color_attributes.new("Basis", 'FLOAT_COLOR', 'POINT')
+
+			flat_N = [value for sublist in N for value in sublist]
+			mesh.attributes.new("Basis_N", 'FLOAT_VECTOR', 'POINT')
+			mesh.attributes["Basis_N"].data.foreach_set('vector', flat_N)
+
+			mesh.color_attributes.new("Basis_NtoC", 'FLOAT_COLOR', 'POINT')
 			basis_normals_as_colors = [value for sublist in map(convert_normal_to_color, N) for value in sublist]
-			mesh.color_attributes["Basis"].data.foreach_set('color_srgb', basis_normals_as_colors)
+			mesh.color_attributes["Basis_NtoC"].data.foreach_set('color_srgb', basis_normals_as_colors)
+
+
+			# TODO: see if we can skip the first/empty morph.
 
 
 			for morph_idx, name in enumerate(geometry.morph_names):
@@ -318,9 +326,14 @@ def import_geometry(scene, geometry, settings):
 
 					block_verts = obj.shape_key_add(name=name).data
 
-					# Create this morph's colour attributes.
-					mesh.color_attributes.new(name, 'FLOAT_COLOR', 'POINT')
-					mesh.color_attributes[name].data.foreach_set('color_srgb', basis_normals_as_colors)
+					# Create this morph's normal and colour attributes.
+					name_N = name + "_N"
+					mesh.attributes.new(name_N, 'FLOAT_VECTOR', 'POINT')
+					mesh.attributes[name_N].data.foreach_set('vector', flat_N)
+
+					name_NtoC = name + "_NtoC"
+					mesh.color_attributes.new(name_NtoC, 'FLOAT_COLOR', 'POINT')
+					mesh.color_attributes[name_NtoC].data.foreach_set('color_srgb', basis_normals_as_colors)
 
 					# modify mesh with dV and dN
 					#
@@ -332,10 +345,12 @@ def import_geometry(scene, geometry, settings):
 						if v:
 							block_verts[i].co+= BlenderVector(v[i])
 
-							# Update the vertex's color attribute 
+							# Update mesh attributes as neccessary.
 							blended_normal = tuple(map(sum, zip(N[i], n[i])))
+							mesh.attributes[name_N].data[i].vector = blended_normal
+
 							normal_as_color = convert_normal_to_color(blended_normal)
-							mesh.color_attributes[name].data[i].color_srgb = normal_as_color
+							mesh.color_attributes[name_NtoC].data[i].color_srgb = normal_as_color
 
 					del used_keys
 

@@ -202,6 +202,10 @@ def export_geometry(scene, settings):
 
 	MORPH_NAMES = [] # [index] -> name
 
+
+	# TODO: try and add the empty elements found in default GMDCs.
+
+
 	log( 'Main geometry' )
 
 	for obj in mesh_objects:
@@ -380,6 +384,10 @@ def export_geometry(scene, settings):
 			mesh_morphs = [] # morph indices of current mesh object
 			first_new_morph_index = None # first new morph that is not present in MORPH_NAMES
 
+
+			# TODO: try using 1 rather than 0 as the first morph's index.
+
+
 			dVerts = []
 			dNorms = []
 
@@ -412,17 +420,52 @@ def export_geometry(scene, settings):
 				mesh.calc_loop_triangles()
 
 				if morphing == 2:
-					# calc normals for this shape
-					if bpy.app.version < (4, 1, 0):
-						# in blender 4.1+ this function has been removed and normals are always calculated
-						mesh.calc_normals_split()
+
+					# Morph normals from custom mesh attributes.
+					attribute_name = key_block.name + "_N"
+					normal_attribute = mesh.attributes.get(attribute_name)
+
+					if normal_attribute == None:
+						log("\x20\x20\x20--No corresponding mesh attribute exist. Using the base mesh normals instead.".format(key_block.name))	
+						
+						# calc normals for this shape
+						if bpy.app.version < (4, 1, 0):
+							# in blender 4.1+ this function has been removed and normals are always calculated
+							mesh.calc_normals_split()
 					
-					mesh_normals = []
-					for tri in mesh.loop_triangles:
-						tri_norm = []
-						for loop_idx in tri.loops:
-							tri_norm.append(tuple(mesh.loops[loop_idx].normal))
-						mesh_normals.append(tri_norm)
+						mesh_normals = []
+						for tri in mesh.loop_triangles:
+							tri_norm = []
+							for loop_idx in tri.loops:
+								tri_norm.append(tuple(mesh.loops[loop_idx].normal))
+							mesh_normals.append(tri_norm)
+
+					else:
+						log("\x20\x20\x20--Morph normals will be collected from the mesh attribute '{}'.".format(attribute_name))
+
+						attribute_domain = mesh.attributes[attribute_name].domain
+
+						if attribute_domain == 'CORNER':
+							flat_normals = [0] * len(mesh.attributes[attribute_name].data) * 3
+							mesh.attributes[attribute_name].data.foreach_get('vector', flat_normals)
+							mesh_normals = [[(sublist[i], sublist[i+1], sublist[i+2]) for i in range(0, 9, 3)] for sublist in [flat_normals[i:i+9] for i in range(0, len(flat_normals), 9)]]
+
+						elif attribute_domain == 'POINT':
+							flat_normals = [0] * len(mesh.attributes[attribute_name].data) * 3
+							mesh.attributes[attribute_name].data.foreach_get('vector', flat_normals)
+							grouped_normals = [flat_normals[i:i+3] for i in range(0, len(flat_normals), 3)]
+
+							mesh_normals = []
+							for tri in mesh.loop_triangles:
+								tri_norm = []
+								for loop_index in tri.loops:
+									vertex_index = mesh.loops[loop_index].vertex_index
+									tri_norm.append(tuple(grouped_normals[vertex_index]))
+								mesh_normals.append(tri_norm)
+
+						else:
+							error("Error! Invalid morph normals mesh attribute domain '{}' for '{}'.".format(attribute_domain, attribute_name))
+							return False
 
 					if settings['export_tangents']:
 						# otherwise there will be problem with geometry indexing
@@ -606,7 +649,7 @@ def export_geometry(scene, settings):
 				v.extend(w)
 			if morphing > 1:
 				dN = [*map(list, zip(*dN)), [], [], []]
-				for v, w in zip(group.dNorms, dV):
+				for v, w in zip(group.dNorms, dN):
 					v.extend(w)
 
 		del V, N, T1, T2, B, W, X, K, dV, dN
@@ -813,6 +856,10 @@ def export_geometry(scene, settings):
 						group.normals[i] = normal
 						count+= 1
 			log( '--Replaced %i normals' % count )
+
+
+	# TODO: align normals for morphs also.
+
 
 	return GeometryData(DATA_GROUPS, INDEX_GROUPS, inverse_transforms, MORPH_NAMES, static_bmesh, dynamic_bmesh)
 
