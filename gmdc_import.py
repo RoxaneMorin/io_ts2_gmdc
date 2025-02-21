@@ -293,8 +293,11 @@ def import_geometry(scene, geometry, settings):
 			dV = list(map(select_data, data_group.dVerts))
 			dN = list(map(select_data, data_group.dNorms))
 
-			log( '\x20\x20--Length of dV: (%i, %i, %i, %i)' % tuple(map(len, dV)) )
-			log( '\x20\x20--Length of dN: (%i, %i, %i, %i)' % tuple(map(len, dN)) )
+			len_dV = tuple(map(len, dV))
+			len_dN = tuple(map(len, dN))
+
+			log( '\x20\x20--Length of dV: (%i, %i, %i, %i)' % len_dV )
+			log( '\x20\x20--Length of dN: (%i, %i, %i, %i)' % len_dN )
 
 			# basis
 			obj.shape_key_add(name="Basis")
@@ -326,8 +329,8 @@ def import_geometry(scene, geometry, settings):
 
 					block_verts = obj.shape_key_add(name=name).data
 
-					# Create this morph's normal and colour attributes. Skip the empty morhp.
-					if name != "::":
+					# Verify whether this morph has or need normals. Skip the nameless first morph.
+					if len_dV == len_dN and name != "::":
 						name_N = name + "_N"
 						mesh.attributes.new(name_N, 'FLOAT_VECTOR', 'POINT')
 						mesh.attributes[name_N].data.foreach_set('vector', flat_N)
@@ -351,7 +354,7 @@ def import_geometry(scene, geometry, settings):
 
 								normal_as_color = convert_normal_to_color(blended_normal)
 								mesh.color_attributes[name_NtoC].data[i].color_srgb = normal_as_color
-
+					
 					else:
 						# modify mesh with dV only
 						#
