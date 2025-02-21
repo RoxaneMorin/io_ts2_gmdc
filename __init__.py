@@ -178,6 +178,11 @@ class Export_GMDC(bpy.types.Operator, ExportHelper):
 			description = "Calculate and export tangent vectors (required for bump mapping)",
 			default     = False )
 
+	export_petdata : BoolProperty(
+			name        = "EP4 (Pets) Data",
+			description = "Export 'VertexID' and 'RegionMask' data, if found in custom mesh attributes",
+			default     = False )
+
 	export_bmesh : BoolProperty(
 			name        = "Bounding geometry",
 			description = "Create mesh object for bounding geometry (if any)",
@@ -255,6 +260,7 @@ class Export_GMDC(bpy.types.Operator, ExportHelper):
 			'apply_transforms' : self.apply_transforms,
 			  'export_rigging' : self.export_rigging,
 			 'export_tangents' : self.export_tangents,
+			 'export_petdata' : self.export_petdata,
 			    'export_bmesh' : self.export_bmesh,
 			      'bmesh_name' : self.bmesh_name.strip(),
 			 'bmesh_threshold' : self.bmesh_threshold,
@@ -275,6 +281,7 @@ class Export_GMDC(bpy.types.Operator, ExportHelper):
 		box.prop(self, 'apply_transforms')
 		box.prop(self, 'export_rigging')
 		box.prop(self, 'export_tangents')
+		box.prop(self, 'export_petdata')
 		box.prop(self, 'export_morphs')
 		box.prop(self, 'align_normals')
 		if self.align_normals:

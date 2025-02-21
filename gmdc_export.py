@@ -86,6 +86,7 @@ def begin_export(filename, scene, settings):
 	log( '--Apply transforms:', settings['apply_transforms'] )
 	log( '--Export rigging:  ', settings['export_rigging'] )
 	log( '--Export tangents: ', settings['export_tangents'] )
+	log( '--Export EP4 data: ', settings['export_petdata'] )
 	log( '--Export bounding geometry:', settings['export_bmesh'] )
 	log( '--Bounding mesh name:', settings['bmesh_name'] and '"%s"' % settings['bmesh_name'] or 'none' )
 	log( '--Weight threshold:', settings['bmesh_threshold'] )
@@ -331,10 +332,10 @@ def export_geometry(scene, settings):
 
 		# pet data
 		#
-		
+
 		# Vertex ID
 		vertexID_attribute = mesh.attributes.get("VertexID")
-		if vertexID_attribute != None:
+		if settings['export_petdata'] and vertexID_attribute != None:
 
 			log( '--Processing EP4 VertexID...' )
 
@@ -365,7 +366,7 @@ def export_geometry(scene, settings):
 
 		# RegionMask
 		regionMask_attribute = mesh.attributes.get("RegionMask")
-		if regionMask_attribute != None:
+		if settings['export_petdata'] and regionMask_attribute != None:
 
 			log( '--Processing EP4 RegionMask...' )
 
