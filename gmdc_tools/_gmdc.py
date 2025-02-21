@@ -662,11 +662,15 @@ def _write_geometry_data(f, geometry):
 			SECTIONS.append(('X', 0, group.tangents))
 		
 		if group.vertexID:
+			indices.append(len(SECTIONS))
+
 			# align tuples
 			v = [(vid + (0xff, 0xff, 0xff, 0xff))[:4] for vid in group.vertexID]
 			SECTIONS.append(('VId', 0, v))
 
 		if group.regionMask:
+			indices.append(len(SECTIONS))
+
 			# align tuples
 			v = [(rm + (0xff, 0xff, 0xff, 0xff))[:4] for rm in group.regionMask]
 			SECTIONS.append(('RM', 0, v))
