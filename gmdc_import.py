@@ -313,7 +313,7 @@ def import_geometry(scene, geometry, settings):
 
 
 			# TODO: see if we can skip the first/empty morph.
-
+			
 
 			for morph_idx, name in enumerate(geometry.morph_names):
 
@@ -326,31 +326,41 @@ def import_geometry(scene, geometry, settings):
 
 					block_verts = obj.shape_key_add(name=name).data
 
-					# Create this morph's normal and colour attributes.
-					name_N = name + "_N"
-					mesh.attributes.new(name_N, 'FLOAT_VECTOR', 'POINT')
-					mesh.attributes[name_N].data.foreach_set('vector', flat_N)
+					# Create this morph's normal and colour attributes. Skip the empty morhp.
+					if name != "::":
+						name_N = name + "_N"
+						mesh.attributes.new(name_N, 'FLOAT_VECTOR', 'POINT')
+						mesh.attributes[name_N].data.foreach_set('vector', flat_N)
 
-					name_NtoC = name + "_NtoC"
-					mesh.color_attributes.new(name_NtoC, 'FLOAT_COLOR', 'POINT')
-					mesh.color_attributes[name_NtoC].data.foreach_set('color_srgb', basis_normals_as_colors)
+						name_NtoC = name + "_NtoC"
+						mesh.color_attributes.new(name_NtoC, 'FLOAT_COLOR', 'POINT')
+						mesh.color_attributes[name_NtoC].data.foreach_set('color_srgb', basis_normals_as_colors)
 
-					# modify mesh with dV and dN
-					#
-					for i, key in used_keys:
-						j = key.index(morph_idx)
-						v = dV[j]
-						n = dN[j]
+						# modify mesh with dV and dN
+						#
+						for i, key in used_keys:
+							j = key.index(morph_idx)
+							v = dV[j]
+							n = dN[j]
 
-						if v:
-							block_verts[i].co+= BlenderVector(v[i])
+							if v:
+								block_verts[i].co+= BlenderVector(v[i])
 
-							# Update mesh attributes as neccessary.
-							blended_normal = tuple(map(sum, zip(N[i], n[i])))
-							mesh.attributes[name_N].data[i].vector = blended_normal
+								blended_normal = tuple(map(sum, zip(N[i], n[i])))
+								mesh.attributes[name_N].data[i].vector = blended_normal
 
-							normal_as_color = convert_normal_to_color(blended_normal)
-							mesh.color_attributes[name_NtoC].data[i].color_srgb = normal_as_color
+								normal_as_color = convert_normal_to_color(blended_normal)
+								mesh.color_attributes[name_NtoC].data[i].color_srgb = normal_as_color
+
+					else:
+						# modify mesh with dV only
+						#
+						for i, key in used_keys:
+							j = key.index(morph_idx)
+							v = dV[j]
+
+							if v:
+								block_verts[i].co+= BlenderVector(v[i])
 
 					del used_keys
 

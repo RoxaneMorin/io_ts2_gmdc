@@ -419,6 +419,10 @@ def export_geometry(scene, settings):
 
 				mesh.calc_loop_triangles()
 
+
+				# TODO: do not take into account the empty :: morph.
+
+
 				if morphing == 2:
 
 					# Morph normals from custom mesh attributes.
