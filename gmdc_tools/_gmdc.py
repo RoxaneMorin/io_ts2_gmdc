@@ -41,6 +41,8 @@ class DataGroup(object):
 		self.tangents   = list()
 		self.mask       = list()
 		self.keys       = list()
+		self.vertexID       = list()
+		self.regionMask       = list()
 		self.dVerts = [[], [], [], []]
 		self.dNorms = [[], [], [], []]
 		self.tex_coords2 = []
@@ -139,19 +141,25 @@ def _load_geometry_data(f, log_level):
 	#
 
 	dd = {
-		b'\x81\x07\x83\x5B': ('Vertices',    'V'),
-		b'\x8B\x07\x83\x3B': ('Normals',     'N'),
-		b'\xAB\x07\x83\xBB': ('TexCoords',   'T'),
-		b'\x11\x01\xD7\xFB': ('BoneIndices', 'B'),
-		b'\x05\x01\xD7\x3B': ('BoneWeights', 'W'),
-		b'\xA0\x2B\xD9\x89': ('Tangents',    'X'),
-		b'\xE1\xCF\xF2\x5C': ('DiffVerts',  'dV'),
-		b'\x6A\x3A\x6F\xCB': ('DiffNorms',  'dN'),
-		b'\xDC\xCF\xF2\xDC': ('DiffKeys',    'K'),
-		b'\x95\x07\x83\xDB': ('DeformMask',  'M'),
-		b'\x82\xEE\x4D\x7C': ('0x7C4DEE82',  '1'),
-		b'\x5C\xFC\x4A\x5C': ('0x5C4AFC5C',  '2'),
-		b'\x56\xFC\x4A\x1C': ('0x1C4AFC56',  '3'),
+		b'\x81\x07\x83\x5B': ('Vertices',    'V'), # ThreeFloat
+		b'\x8B\x07\x83\x3B': ('Normals',     'N'), # ThreeFloat
+		b'\xAB\x07\x83\xBB': ('TexCoords',   'T'), # 'UV Coordinates', TwoFloat
+		b'\x11\x01\xD7\xFB': ('BoneIndices', 'B'), # 'Bone Assignments', OneDWord
+		b'\x05\x01\xD7\x3B': ('BoneWeights', 'W'), # ThreeFloat
+		b'\xA0\x2B\xD9\x89': ('Tangents',    'X'), # 'Bump Map Normals', ThreeFloat
+		b'\xE1\xCF\xF2\x5C': ('DiffVerts',  'dV'), # 'Morph Vertex Deltas', ThreeFloat
+		b'\x6A\x3A\x6F\xCB': ('DiffNorms',  'dN'), # 'Normal Morph Deltas', ThreeFloat
+		b'\xDC\xCF\xF2\xDC': ('DiffKeys',    'K'), # 'Morph Vertex Map', OneDWord
+		b'\x95\x07\x83\xDB': ('DeformMask',  'M'), # 'UV Coordinate Deltas', OneDWord
+		b'\x82\xEE\x4D\x7C': ('0x7C4DEE82',  '1'), # "Target Indices", ThreeFloat
+		b'\x5C\xFC\x4A\x5C': ('0x5C4AFC5C',  '2'), # "Blend Weights", ?
+		b'\x56\xFC\x4A\x1C': ('0x1C4AFC56',  '3'), # "Blend Indices", ?
+		b'\xC3\x13\x41\x11': ('EP4VertexID', '4'), # "(EP4) VertexID", DWord. Only the first two bytes appear to have values. Similar to the bone indice DWord that represents the 4 potential effector bones?
+		b'\xCD\x13\x41\x11': ('EP4RegionMask', '5'), # "(EP4) RegionMask", DWord. Only the first two bites appear to have values. Often mostly zeroes. No repeats. The DWord may represent a single value?
+		# 0xCB7206A1 	Colour
+		# 0xEB720693 	Colour Deltas
+		# 0x9BB38AFB 	Binormals
+		# 0x69D92B93 	Bump Map Normal Deltas
 		}
 
 	if log_level:
@@ -206,7 +214,7 @@ def _load_geometry_data(f, log_level):
 			SECTIONS.append( (s2, sub_idx, data) )
 
 		elif s1 == 'BoneIndices':
-
+			
 			assert i*4 == j
 
 			data = unpack('%iB'%j, f.read(j))
@@ -217,11 +225,25 @@ def _load_geometry_data(f, log_level):
 			SECTIONS.append( ('B', sub_idx, data) )
 
 		elif s1 == 'DiffKeys' or s1 == 'DeformMask':
-
+			
 			assert i*4 == j
 
 			data = chunk(unpack('%iB'%j, f.read(j)), 4)
 			SECTIONS.append( (s2, sub_idx, data) )
+
+		elif s1 == 'EP4VertexID':
+
+			assert i*4 == j
+
+			data = chunk(unpack('%iB'%j, f.read(j)), 4)
+			SECTIONS.append( ('VId', sub_idx, data) )
+
+		elif s1 == 'EP4RegionMask':
+
+			assert i*4 == j
+
+			data = chunk(unpack('%iB'%j, f.read(j)), 4)
+			SECTIONS.append( ('RM', sub_idx, data) )
 
 		else: # 0x7C4DEE82, 0x5C4AFC5C, 0x1C4AFC56
 
@@ -232,7 +254,6 @@ def _load_geometry_data(f, log_level):
 
 			log_level>1 and log( '--Number of vectors, indices:', len(V) )
 
-
 		# indices
 		#
 		if s1 in ('0x7C4DEE82', '0x5C4AFC5C', '0x1C4AFC56') and 'V' in locals() and V != None:
@@ -241,8 +262,8 @@ def _load_geometry_data(f, log_level):
 			s = f.read(i*2)
 			I = unpack('<%iH'%i, s)
 
-			assert len(I) == len(V)
-
+			assert (len(I) == len(V)) or (len(I) == 0)
+			
 			# ignore this data
 			SECTIONS.append( (None, None, None) )
 
@@ -300,6 +321,8 @@ def _load_geometry_data(f, log_level):
 				elif type == 'X': v = group.tangents
 				elif type == 'M': v = group.mask
 				elif type == 'K': v = group.keys
+				elif type == 'VId': v = group.vertexID
+				elif type == 'RM': v = group.regionMask
 				elif type =='dV': v = group.dVerts[sub_index]
 				elif type =='dN': v = group.dNorms[sub_index]
 				elif type == 'T': v = group.tex_coords and group.tex_coords2
@@ -503,6 +526,8 @@ def _rm_doubles(geometry):
 			B = g1.bones   or repeat(0)
 			W = g1.weights or repeat(0)
 			K = g1.keys    or repeat(0)
+			VId = g1.vertexID or repeat(0)
+			RM = g1.regionMask or repeat(0)
 
 			g1.mask = [] # remove deform mask
 
@@ -520,7 +545,7 @@ def _rm_doubles(geometry):
 			indices = [] # indices[old_index] -> new_index
 
 			# search
-			for vertex in zip(g1.vertices, N, B, W, K, dV, dN):
+			for vertex in zip(g1.vertices, N, B, W, K, VId, RM, dV, dN):
 				k = unique_verts.setdefault(vertex, len(unique_verts))
 				indices.append(k)
 			assert len(indices) == g1.count
@@ -555,7 +580,7 @@ def _rm_doubles(geometry):
 			g1.tex_coords2 = []
 			g1.tangents = []
 
-			g1.vertices, N, B, W, K, dV, dN = map(list, zip(*unique_verts))
+			g1.vertices, N, B, W, K, VId, RM, dV, dN = map(list, zip(*unique_verts))
 			del unique_verts, indices
 
 			# update data
@@ -563,6 +588,8 @@ def _rm_doubles(geometry):
 			if g1.bones   : g1.bones   = B
 			if g1.weights : g1.weights = W
 			if g1.keys    : g1.keys    = K
+			if g1.vertexID    : g1.vertexID    = VId
+			if g1.regionMask    : g1.regionMask    = RM
 
 			# pad with empty lists
 			if any(g1.dVerts):
@@ -572,7 +599,7 @@ def _rm_doubles(geometry):
 				dN = map(list, zip(*dN)) + [[], [], []]
 				g1.dNorms = dN[:4]
 
-			del N, B, W, K, dV, dN
+			del N, B, W, K, VId, RM, dV, dN
 
 	#<- data_groups
 

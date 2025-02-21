@@ -364,6 +364,33 @@ def import_geometry(scene, geometry, settings):
 
 					del used_keys
 
+		# pet data
+		#
+		if data_group.vertexID:
+
+			log( '--Adding EP4 VertexID (custom mesh attribute)...' )
+
+			VId = select_data(data_group.vertexID)
+			
+			# Add as a custom mesh attribute.
+			mesh = obj.data
+			flat_VId = [value for sublist in VId for value in sublist]
+			mesh.attributes.new("VertexID", 'FLOAT_COLOR', 'POINT')
+			mesh.attributes["VertexID"].data.foreach_set('color', flat_VId)
+
+		if data_group.regionMask:
+
+			log( '--Adding EP4 RegionMask (custom mesh attribute)...' )
+
+			RM = select_data(data_group.regionMask)
+			
+			# Add as a custom mesh attribute.
+			mesh = obj.data
+			flat_RM = [value for sublist in RM for value in sublist]
+			mesh.attributes.new("RegionMask", 'FLOAT_COLOR', 'POINT')
+			mesh.attributes["RegionMask"].data.foreach_set('color', flat_RM)
+
+
 	#<- groups
 
 	#
