@@ -661,8 +661,15 @@ def _write_geometry_data(f, geometry):
 			indices.append(len(SECTIONS))
 			SECTIONS.append(('X', 0, group.tangents))
 		
-		#group.vertexID
-		#group.regionMask
+		if group.vertexID:
+			# align tuples
+			v = [(vid + (0xff, 0xff, 0xff, 0xff))[:4] for vid in group.vertexID]
+			SECTIONS.append(('VId', 0, v))
+
+		if group.regionMask:
+			# align tuples
+			v = [(rm + (0xff, 0xff, 0xff, 0xff))[:4] for rm in group.regionMask]
+			SECTIONS.append(('RM', 0, v))
 
 		if group.keys:
 			# keys
@@ -705,8 +712,6 @@ def _write_geometry_data(f, geometry):
 
 	for type, sub_index, data in SECTIONS:
 
-		log(type)
-
 		s = pack('<l', len(data)) # number of elements
 		cc = len(data[0]) # component count
 
@@ -721,10 +726,12 @@ def _write_geometry_data(f, geometry):
 		elif type =='dN': s+= b'\x6A\x3A\x6F\xCB'
 		elif type == 'K': s+= b'\xDC\xCF\xF2\xDC'
 		elif type == 'M': s+= b'\x95\x07\x83\xDB'
+		elif type == 'VId' : s+= b'\xC3\x13\x41\x11'
+		elif type == 'RM' : s+= b'\xCD\x13\x41\x11'
 
 		s+= pack('<l', sub_index)
 
-		if type in ('B', 'K', 'M'):
+		if type in ('B', 'K', 'M', 'VId', 'RM'):
 			s+= b'\x04\x00\x00\x00' # 4 bytes
 			s+= b'\x03\x00\x00\x00' # unknown
 			s+= pack('<l', len(data)*4) # size in bytes

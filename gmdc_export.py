@@ -343,12 +343,12 @@ def export_geometry(scene, settings):
 			if attribute_domain == 'CORNER':
 				flat_vertexID = [0] * len(mesh.attributes["VertexID"].data) * 4
 				mesh.attributes["VertexID"].data.foreach_get('color', flat_vertexID)
-				mesh_vertexID  = [tuple(chunk(sublist, 4)) for sublist in tuple(chunk(flat_vertexID, 12))]
+				mesh_vertexID  = [tuple(chunk(sublist, 4)) for sublist in tuple(chunk(list(map(int, flat_vertexID)), 12))]
 
 			elif attribute_domain == 'POINT':
 				flat_vertexID = [0] * len(mesh.attributes["VertexID"].data) * 4
 				mesh.attributes["VertexID"].data.foreach_get('color', flat_vertexID)
-				grouped_vertexID = tuple(chunk(flat_vertexID, 4))
+				grouped_vertexID = tuple(chunk(list(map(int, flat_vertexID)), 4))
 
 				mesh_vertexID = []
 				for tri in mesh.loop_triangles:
@@ -374,12 +374,12 @@ def export_geometry(scene, settings):
 			if attribute_domain == 'CORNER':
 				flat_regionMask = [0] * len(mesh.attributes["RegionMask"].data) * 4
 				mesh.attributes["RegionMask"].data.foreach_get('color', flat_regionMask)
-				mesh_regionMask  = [tuple(chunk(sublist, 4)) for sublist in chunk(flat_regionMask, 12)]
+				mesh_regionMask  = [tuple(chunk(sublist, 4)) for sublist in chunk(list(map(int, flat_regionMask)), 12)]
 
 			elif attribute_domain == 'POINT':
 				flat_regionMask = [0] * len(mesh.attributes["RegionMask"].data) * 4
 				mesh.attributes["RegionMask"].data.foreach_get('color', flat_regionMask)
-				grouped_regionMask = chunk(flat_regionMask, 4)
+				grouped_regionMask = chunk(list(map(int, flat_regionMask)), 4)
 
 				mesh_regionMask = []
 				for tri in mesh.loop_triangles:
@@ -678,6 +678,11 @@ def export_geometry(scene, settings):
 
 		# does the mesh have rigging data ?
 		rigging = rigging and any(B)
+
+
+		# TODO: review how groups are assembled as it seems to mess up the pet stuff.
+		# We could probably have one data group per object instead.
+
 
 		# try to find a suitable data group
 		group = None
