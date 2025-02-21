@@ -660,6 +660,9 @@ def _write_geometry_data(f, geometry):
 		if group.tangents:
 			indices.append(len(SECTIONS))
 			SECTIONS.append(('X', 0, group.tangents))
+		
+		#group.vertexID
+		#group.regionMask
 
 		if group.keys:
 			# keys
@@ -701,6 +704,8 @@ def _write_geometry_data(f, geometry):
 	f.write(pack('<l', len(SECTIONS))) # number of sections
 
 	for type, sub_index, data in SECTIONS:
+
+		log(type)
 
 		s = pack('<l', len(data)) # number of elements
 		cc = len(data[0]) # component count

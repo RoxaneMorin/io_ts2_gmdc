@@ -327,10 +327,77 @@ def export_geometry(scene, settings):
 					else:
 						mapped_indices.append(bone_idx)
 				return tuple(mapped_indices)
+		
+
+		# pet data
+		#
+		
+		# Vertex ID
+		vertexID_attribute = mesh.attributes.get("VertexID")
+		if vertexID_attribute != None:
+
+			log( '--Processing EP4 VertexID...' )
+
+			attribute_domain = mesh.attributes["VertexID"].domain
+
+			if attribute_domain == 'CORNER':
+				flat_vertexID = [0] * len(mesh.attributes["VertexID"].data) * 4
+				mesh.attributes["VertexID"].data.foreach_get('color', flat_vertexID)
+				mesh_vertexID  = [tuple(chunk(sublist, 4)) for sublist in tuple(chunk(flat_vertexID, 12))]
+
+			elif attribute_domain == 'POINT':
+				flat_vertexID = [0] * len(mesh.attributes["VertexID"].data) * 4
+				mesh.attributes["VertexID"].data.foreach_get('color', flat_vertexID)
+				grouped_vertexID = tuple(chunk(flat_vertexID, 4))
+
+				mesh_vertexID = []
+				for tri in mesh.loop_triangles:
+					tri_norm = []
+					for loop_index in tri.loops:
+						vertex_index = mesh.loops[loop_index].vertex_index
+						tri_norm.append(tuple(grouped_vertexID[vertex_index]))
+					mesh_vertexID.append(tri_norm)
+			else:
+				error("Error! Invalid VertexID mesh attribute domain '{}'.".format(attribute_domain))
+				return False
+		else:
+			mesh_vertexID = repeat((None, None, None))
+
+		# RegionMask
+		regionMask_attribute = mesh.attributes.get("RegionMask")
+		if regionMask_attribute != None:
+
+			log( '--Processing EP4 RegionMask...' )
+
+			attribute_domain = mesh.attributes["RegionMask"].domain
+
+			if attribute_domain == 'CORNER':
+				flat_regionMask = [0] * len(mesh.attributes["RegionMask"].data) * 4
+				mesh.attributes["RegionMask"].data.foreach_get('color', flat_regionMask)
+				mesh_regionMask  = [tuple(chunk(sublist, 4)) for sublist in chunk(flat_regionMask, 12)]
+
+			elif attribute_domain == 'POINT':
+				flat_regionMask = [0] * len(mesh.attributes["RegionMask"].data) * 4
+				mesh.attributes["RegionMask"].data.foreach_get('color', flat_regionMask)
+				grouped_regionMask = chunk(flat_regionMask, 4)
+
+				mesh_regionMask = []
+				for tri in mesh.loop_triangles:
+					tri_norm = []
+					for loop_index in tri.loops:
+						vertex_index = mesh.loops[loop_index].vertex_index
+						tri_norm.append(tuple(grouped_regionMask[vertex_index]))
+					mesh_regionMask.append(tri_norm)
+			else:
+				error("Error! Invalid RegionMask mesh attribute domain '{}'.".format(attribute_domain))
+				return False
+		else:
+			mesh_regionMask = repeat((None, None, None))
+
 
 		all_vertices = [] # for non-indexed vertices
 
-		for tri, tri_norm, tri_uv, tri_tan in zip(mesh.loop_triangles, mesh_normals, mesh_tex_coords, mesh_tangents):
+		for tri, tri_norm, tri_uv, tri_tan, tri_vid, tri_rm in zip(mesh.loop_triangles, mesh_normals, mesh_tex_coords, mesh_tangents, mesh_vertexID, mesh_regionMask):
 
 			verts = [tuple(mesh.vertices[idx].co + obj_loc) for idx in tri.vertices]
 
@@ -359,11 +426,12 @@ def export_geometry(scene, settings):
 				weights = [(), (), ()]
 
 			# add vertices to list
-			all_vertices.extend(zip(verts, tri_norm, tri_uv, bones, weights, tri_tan))
+			all_vertices.extend(zip(verts, tri_norm, tri_uv, bones, weights, tri_tan, tri_vid, tri_rm))
 
 		#<- triangles
 
-		del mesh_tex_coords, mesh_tangents
+		del mesh_tex_coords, mesh_tangents, mesh_vertexID, mesh_regionMask
+
 
 		#
 		# morphs / vertex animations
@@ -452,12 +520,12 @@ def export_geometry(scene, settings):
 						if attribute_domain == 'CORNER':
 							flat_normals = [0] * len(mesh.attributes[attribute_name].data) * 3
 							mesh.attributes[attribute_name].data.foreach_get('vector', flat_normals)
-							mesh_normals = [[(sublist[i], sublist[i+1], sublist[i+2]) for i in range(0, 9, 3)] for sublist in [flat_normals[i:i+9] for i in range(0, len(flat_normals), 9)]]
+							mesh_normals = [tuple(chunk(sublist, 3)) for sublist in chunk(flat_normals, 9)]
 
 						elif attribute_domain == 'POINT':
 							flat_normals = [0] * len(mesh.attributes[attribute_name].data) * 3
 							mesh.attributes[attribute_name].data.foreach_get('vector', flat_normals)
-							grouped_normals = [flat_normals[i:i+3] for i in range(0, len(flat_normals), 3)]
+							grouped_normals = chunk(flat_normals, 3)
 
 							mesh_normals = []
 							for tri in mesh.loop_triangles:
@@ -473,7 +541,7 @@ def export_geometry(scene, settings):
 
 					if settings['export_tangents']:
 						# otherwise there will be problem with geometry indexing
-						mesh.calc_tangents(uvmap=uv_layer1.name)
+						mesh.calc_tangents(uvmap=mesh.uv_layers[0].name) # Using uv_layer1 too often failed.
 
 				# add difference arrays
 				dv = [] ; dVerts.append(dv)
@@ -571,6 +639,7 @@ def export_geometry(scene, settings):
 
 		#<- morphing
 
+
 		#
 		# index geometry
 		#
@@ -590,7 +659,7 @@ def export_geometry(scene, settings):
 
 		del all_vertices
 
-		V, N, T, B, W, X, K, dV, dN = [*map(list, zip(*unique_verts))] + [None for i in range(3-2*morphing)]
+		V, N, T, B, W, X, VId, RM, K, dV, dN = [*map(list, zip(*unique_verts))] + [None for i in range(3-2*morphing)]
 
 		# separate uv layers (if needed)
 		if not mesh.uv_layers:
@@ -646,6 +715,12 @@ def export_geometry(scene, settings):
 			group.weights.extend(W)
 		if settings['export_tangents']:
 			group.tangents.extend(X)
+
+		if any(VId):
+			group.vertexID.extend(VId)
+		if any(RM):
+			group.regionMask.extend(RM)
+
 		if morphing:
 			group.keys.extend(K)
 			dV = [*map(list, zip(*dV)), [], [], []]
@@ -656,7 +731,7 @@ def export_geometry(scene, settings):
 				for v, w in zip(group.dNorms, dN):
 					v.extend(w)
 
-		del V, N, T1, T2, B, W, X, K, dV, dN
+		del V, N, T1, T2, B, W, X, K, VId, RM, dV, dN
 
 		k = group.count
 		group.count = len(group.vertices)
