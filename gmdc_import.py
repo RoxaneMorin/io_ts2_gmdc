@@ -305,10 +305,14 @@ def import_geometry(scene, geometry, settings):
 
 			# Save the source normals as vertex colours for ease of preview.
 			mesh = obj.data
+			
 			flat_N = [value for sublist in N for value in sublist]
-			mesh.color_attributes.new("Basis_NtoC", 'FLOAT_COLOR', 'POINT')
+			mesh.attributes.new("OriginalNormals", 'FLOAT_VECTOR', 'POINT')
+			mesh.attributes["OriginalNormals"].data.foreach_set('vector', flat_N)
+			
+			mesh.color_attributes.new("OriginalNormals_AsColours", 'FLOAT_COLOR', 'POINT')
 			basis_normals_as_colors = [value for sublist in map(convert_normal_to_color, N) for value in sublist]
-			mesh.color_attributes["Basis_NtoC"].data.foreach_set('color_srgb', basis_normals_as_colors)
+			mesh.color_attributes["OriginalNormals_AsColours"].data.foreach_set('color_srgb', basis_normals_as_colors)
 
 
 			# TODO: see if we can skip the first/empty morph.
