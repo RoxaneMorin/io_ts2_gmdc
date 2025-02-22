@@ -682,39 +682,39 @@ def export_geometry(scene, settings):
 		del unique_verts, T
 
 		#
-		# add new data group or extend an existing one
+		# create data group
 		#
 
 		# does the mesh have rigging data ?
 		rigging = rigging and any(B)
 
+		# # try to find a suitable data group
+		# group = None
+		# for i, g in enumerate(DATA_GROUPS):
+		# 	b1 = (bool(g.bones) == rigging) # same rigging state
+		# 	if morphing:
+		# 		b2 = sum(bool(x) for x in g.dVerts) == len(dV[0]) # same number of difference arrays
+		# 	else:
+		# 		b2 = not bool(g.dVerts[0]) # no difference arrays
+		# 	b3 = (bool(g.tex_coords) == bool(T1)) # presence of UV layer
+		# 	b4 = (bool(g.tex_coords2) == bool(T2)) # presence of additional UV layer
+		# 	if b1 and b2 and b3 and b4:
+		# 		# found
+		# 		ref_group, group = i, g
+		# 		break
+		# if group:
+		# 	k = group.count
+		# 	indices = list(map(lambda x: x+k, indices)) # shift indices
+		# 	log( '--Extending group # %i...' % ref_group )
+		# else:
+		# 	ref_group = len(DATA_GROUPS)
+		# 	group = DataGroup() ; DATA_GROUPS.append(group)
+		# 	log( '--Adding new group # %i...' % ref_group )
 
-		# TODO: review how groups are assembled as it seems to mess up the pet stuff.
-		# We could probably have one data group per object instead.
-
-
-		# try to find a suitable data group
-		group = None
-		for i, g in enumerate(DATA_GROUPS):
-			b1 = (bool(g.bones) == rigging) # same rigging state
-			if morphing:
-				b2 = sum(bool(x) for x in g.dVerts) == len(dV[0]) # same number of difference arrays
-			else:
-				b2 = not bool(g.dVerts[0]) # no difference arrays
-			b3 = (bool(g.tex_coords) == bool(T1)) # presence of UV layer
-			b4 = (bool(g.tex_coords2) == bool(T2)) # presence of additional UV layer
-			if b1 and b2 and b3 and b4:
-				# found
-				ref_group, group = i, g
-				break
-		if group:
-			k = group.count
-			indices = list(map(lambda x: x+k, indices)) # shift indices
-			log( '--Extending group # %i...' % ref_group )
-		else:
-			ref_group = len(DATA_GROUPS)
-			group = DataGroup() ; DATA_GROUPS.append(group)
-			log( '--Adding new group # %i...' % ref_group )
+		# Always create a new data group.
+		ref_group = len(DATA_GROUPS)
+		group = DataGroup() ; DATA_GROUPS.append(group)
+		log( '--Adding new group # %i...' % ref_group )
 
 		# add vertices to group
 		#
