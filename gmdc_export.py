@@ -495,10 +495,13 @@ def export_geometry(scene, settings):
 				if morphing == 2:
 
 					# Morph normals from custom mesh attributes.
-					attribute_name = key_block.name + "_N"
-					normal_attribute = mesh.attributes.get(attribute_name)
+					delta_attribute_name = key_block.name + "_dN"
+					delta_normal_attribute = mesh.attributes.get(delta_attribute_name)
 
-					if normal_attribute == None:
+					mesh_normals = []
+					need_calc = []
+
+					if delta_normal_attribute == None:
 						log("\x20\x20\x20--No corresponding mesh attribute exist. Using the base mesh normals instead.".format(key_block.name))	
 						
 						# calc normals for this shape
@@ -506,35 +509,36 @@ def export_geometry(scene, settings):
 							# in blender 4.1+ this function has been removed and normals are always calculated
 							mesh.calc_normals_split()
 					
-						mesh_normals = []
 						for tri in mesh.loop_triangles:
 							tri_norm = []
 							for loop_idx in tri.loops:
 								tri_norm.append(tuple(mesh.loops[loop_idx].normal))
 							mesh_normals.append(tri_norm)
+							need_calc.append(True)
 
 					else:
-						log("\x20\x20\x20--Morph normals will be collected from the mesh attribute '{}'.".format(attribute_name))
+						log("\x20\x20\x20--Morph normals will be collected from the mesh attribute '{}'.".format(delta_attribute_name))
 
-						attribute_domain = mesh.attributes[attribute_name].domain
+						delta_attribute_domain = mesh.attributes[delta_attribute_name].domain
 
-						if attribute_domain == 'CORNER':
-							flat_normals = [0] * len(mesh.attributes[attribute_name].data) * 3
-							mesh.attributes[attribute_name].data.foreach_get('vector', flat_normals)
-							mesh_normals = [tuple(chunk(sublist, 3)) for sublist in chunk(flat_normals, 9)]
+						if delta_attribute_domain == 'CORNER':
+							flat_deltas = [0] * len(mesh.attributes[delta_attribute_name].data) * 3
+							mesh.attributes[delta_attribute_name].data.foreach_get('vector', flat_deltas)
+							mesh_normals = [tuple(chunk(sublist, 3)) for sublist in chunk(flat_deltas, 9)]
+							need_calc = [False] * len(mesh_normals)
 
-						elif attribute_domain == 'POINT':
-							flat_normals = [0] * len(mesh.attributes[attribute_name].data) * 3
-							mesh.attributes[attribute_name].data.foreach_get('vector', flat_normals)
-							grouped_normals = chunk(flat_normals, 3)
+						elif delta_attribute_domain == 'POINT':
+							flat_deltas = [0] * len(mesh.attributes[delta_attribute_name].data) * 3
+							mesh.attributes[delta_attribute_name].data.foreach_get('vector', flat_deltas)
+							grouped_normals = chunk(flat_deltas, 3)
 
-							mesh_normals = []
 							for tri in mesh.loop_triangles:
 								tri_norm = []
 								for loop_index in tri.loops:
 									vertex_index = mesh.loops[loop_index].vertex_index
 									tri_norm.append(tuple(grouped_normals[vertex_index]))
 								mesh_normals.append(tri_norm)
+								need_calc.append(False)
 
 						else:
 							error("Error! Invalid morph normals mesh attribute domain '{}' for '{}'.".format(attribute_domain, attribute_name))
@@ -551,12 +555,15 @@ def export_geometry(scene, settings):
 				# loop through all triangles and compute vertex differences
 				j = 0
 				if morphing == 2:
-					for tri, tri_norm in zip(mesh.loop_triangles, mesh_normals):
+					for tri, tri_norm, calc in zip(mesh.loop_triangles, mesh_normals, need_calc):
 						verts = [(key_block.data[idx].co + obj_loc) for idx in tri.vertices]
 						norms = map(BlenderVector, tri_norm)
 						for co, no in zip(verts, norms):
 							dv.append(tuple(co - BlenderVector(all_vertices[j][0])))
-							dn.append(tuple(no - BlenderVector(all_vertices[j][1])))
+							if calc:
+								dn.append(tuple(no - BlenderVector(all_vertices[j][1])))
+							else:
+								dn.append(tuple(no))
 							j+= 1
 				else:
 					for tri in mesh.loop_triangles:
@@ -564,6 +571,7 @@ def export_geometry(scene, settings):
 						for co in verts:
 							dv.append(tuple(co - BlenderVector(all_vertices[j][0])))
 							j+= 1
+
 				assert j == len(all_vertices)
 
 			log( '\x20\x20--Packing...' )

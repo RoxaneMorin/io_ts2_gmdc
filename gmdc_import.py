@@ -303,22 +303,15 @@ def import_geometry(scene, geometry, settings):
 			obj.shape_key_add(name="Basis")
 
 
-			# Save the source normals as vertex attributes and colours.
+			# Save the source normals as vertex colours for ease of preview.
 			mesh = obj.data
-
 			flat_N = [value for sublist in N for value in sublist]
-			mesh.attributes.new("Basis_N", 'FLOAT_VECTOR', 'POINT')
-			mesh.attributes["Basis_N"].data.foreach_set('vector', flat_N)
-
 			mesh.color_attributes.new("Basis_NtoC", 'FLOAT_COLOR', 'POINT')
 			basis_normals_as_colors = [value for sublist in map(convert_normal_to_color, N) for value in sublist]
 			mesh.color_attributes["Basis_NtoC"].data.foreach_set('color_srgb', basis_normals_as_colors)
 
 
 			# TODO: see if we can skip the first/empty morph.
-			
-			# TODO: see if we can increase the precision of saved normals.
-			# Could we instead save only the deltas to the custom attributes?
 
 
 			for morph_idx, name in enumerate(geometry.morph_names):
@@ -334,9 +327,9 @@ def import_geometry(scene, geometry, settings):
 
 					# Verify whether this morph has or need normals. Skip the nameless first morph.
 					if len_dV == len_dN and name != "::":
-						name_N = name + "_N"
-						mesh.attributes.new(name_N, 'FLOAT_VECTOR', 'POINT')
-						mesh.attributes[name_N].data.foreach_set('vector', flat_N)
+
+						name_dN = name + "_dN"
+						mesh.attributes.new(name_dN, 'FLOAT_VECTOR', 'POINT')
 
 						name_NtoC = name + "_NtoC"
 						mesh.color_attributes.new(name_NtoC, 'FLOAT_COLOR', 'POINT')
@@ -352,12 +345,12 @@ def import_geometry(scene, geometry, settings):
 							if v:
 								block_verts[i].co+= BlenderVector(v[i])
 
-								blended_normal = tuple(map(sum, zip(N[i], n[i])))
-								mesh.attributes[name_N].data[i].vector = blended_normal
+								mesh.attributes[name_dN].data[i].vector = n[i]
 
+								blended_normal = tuple(map(sum, zip(N[i], n[i])))
 								normal_as_color = convert_normal_to_color(blended_normal)
 								mesh.color_attributes[name_NtoC].data[i].color_srgb = normal_as_color
-					
+
 					else:
 						# modify mesh with dV only
 						#
