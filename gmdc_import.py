@@ -317,6 +317,9 @@ def import_geometry(scene, geometry, settings):
 
 			# TODO: see if we can skip the first/empty morph.
 			
+			# TODO: see if we can increase the precision of saved normals.
+			# Could we instead save only the deltas to the custom attributes?
+
 
 			for morph_idx, name in enumerate(geometry.morph_names):
 
