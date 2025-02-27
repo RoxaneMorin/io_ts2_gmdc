@@ -32,7 +32,8 @@ from .gmdc_tools import (
 	load_resource,
 	Vector,
 	Transform,
-	build_transform_tree
+	build_transform_tree,
+	convert_normal_to_color
 	)
 
 def popup_message(title, message, icon='NONE'):
@@ -290,11 +291,32 @@ def import_geometry(scene, geometry, settings):
 
 			keys = select_data(data_group.keys)
 			dV = list(map(select_data, data_group.dVerts))
+			dN = list(map(select_data, data_group.dNorms))
 
-			log( '\x20\x20--Length of dV: (%i, %i, %i, %i)' % tuple(map(len, dV)) )
+			len_dV = tuple(map(len, dV))
+			len_dN = tuple(map(len, dN))
+
+			log( '\x20\x20--Length of dV: (%i, %i, %i, %i)' % len_dV )
+			log( '\x20\x20--Length of dN: (%i, %i, %i, %i)' % len_dN )
 
 			# basis
 			obj.shape_key_add(name="Basis")
+
+
+			# Save the source normals as vertex colours for ease of preview.
+			mesh = obj.data
+			
+			flat_N = [value for sublist in N for value in sublist]
+			mesh.attributes.new("OriginalNormals", 'FLOAT_VECTOR', 'POINT')
+			mesh.attributes["OriginalNormals"].data.foreach_set('vector', flat_N)
+			
+			mesh.color_attributes.new("OriginalNormals_AsColours", 'FLOAT_COLOR', 'POINT')
+			basis_normals_as_colors = [value for sublist in map(convert_normal_to_color, N) for value in sublist]
+			mesh.color_attributes["OriginalNormals_AsColours"].data.foreach_set('color_srgb', basis_normals_as_colors)
+
+
+			# TODO: see if we can skip the first/empty morph.
+
 
 			for morph_idx, name in enumerate(geometry.morph_names):
 
@@ -307,15 +329,70 @@ def import_geometry(scene, geometry, settings):
 
 					block_verts = obj.shape_key_add(name=name).data
 
-					# modify mesh with dV
-					#
-					for i, key in used_keys:
-						j = key.index(morph_idx)
-						v = dV[j]
-						if v:
-							block_verts[i].co+= BlenderVector(v[i])
+					# Verify whether this morph has or need normals. Skip the nameless first morph.
+					if len_dV == len_dN and name != "::":
+
+						name_dN = name + "_dN"
+						mesh.attributes.new(name_dN, 'FLOAT_VECTOR', 'POINT')
+
+						name_NtoC = name + "_NtoC"
+						mesh.color_attributes.new(name_NtoC, 'FLOAT_COLOR', 'POINT')
+						mesh.color_attributes[name_NtoC].data.foreach_set('color_srgb', basis_normals_as_colors)
+
+						# modify mesh with dV and dN
+						#
+						for i, key in used_keys:
+							j = key.index(morph_idx)
+							v = dV[j]
+							n = dN[j]
+
+							if v:
+								block_verts[i].co+= BlenderVector(v[i])
+
+								mesh.attributes[name_dN].data[i].vector = n[i]
+
+								blended_normal = tuple(map(sum, zip(N[i], n[i])))
+								normal_as_color = convert_normal_to_color(blended_normal)
+								mesh.color_attributes[name_NtoC].data[i].color_srgb = normal_as_color
+
+					else:
+						# modify mesh with dV only
+						#
+						for i, key in used_keys:
+							j = key.index(morph_idx)
+							v = dV[j]
+
+							if v:
+								block_verts[i].co+= BlenderVector(v[i])
 
 					del used_keys
+
+		# pet data
+		#
+		if data_group.vertexID:
+
+			log( '--Adding EP4 VertexID (custom mesh attribute)...' )
+
+			VId = select_data(data_group.vertexID)
+			
+			# Add as a custom mesh attribute.
+			mesh = obj.data
+			flat_VId = [value for sublist in VId for value in sublist]
+			mesh.attributes.new("VertexID", 'FLOAT_COLOR', 'POINT')
+			mesh.attributes["VertexID"].data.foreach_set('color', flat_VId)
+
+		if data_group.regionMask:
+
+			log( '--Adding EP4 RegionMask (custom mesh attribute)...' )
+
+			RM = select_data(data_group.regionMask)
+			
+			# Add as a custom mesh attribute.
+			mesh = obj.data
+			flat_RM = [value for sublist in RM for value in sublist]
+			mesh.attributes.new("RegionMask", 'FLOAT_COLOR', 'POINT')
+			mesh.attributes["RegionMask"].data.foreach_set('color', flat_RM)
+
 
 	#<- groups
 

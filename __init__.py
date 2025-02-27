@@ -1,6 +1,7 @@
 #-------------------------------------------------------------------------------
 # Original work: Copyright (C) 2021  DjAlex88 (https://github.com/djalex88/)
 # Modified work: Copyright (C) 2024  Cosmatevs (https://github.com/Cosmatevs/)
+# Modified work: Copyright (C) 2025  CrispsandKerosene https://github.com/RoxaneMorin/)
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -24,9 +25,9 @@
 bl_info = {
 	"name": "TS2 GMDC Importer/Exporter",
 	"description": "Import-Export TS2 GMDC, Import skeleton from CRES.",
-	"author": "DjAlex88 (https://github.com/djalex88/), Cosmatevs",
-	"version": (0, 91, 3),
-	"blender": (2, 80, 0),
+	"author": "DjAlex88 (https://github.com/djalex88/), Cosmatevs, CrispsandKerosene",
+	"version": (0, 92, 0),
+	"blender": (3, 60, 0),
 	"location": "File > Import > Import TS2 GMDC (.5gd, .gmdc)",
 	"category": "Import-Export",
 }
@@ -178,6 +179,11 @@ class Export_GMDC(bpy.types.Operator, ExportHelper):
 			description = "Calculate and export tangent vectors (required for bump mapping)",
 			default     = False )
 
+	export_petdata : BoolProperty(
+			name        = "EP4 (Pets) Data",
+			description = "Export 'VertexID' and 'RegionMask' data, if found in custom mesh attributes",
+			default     = False )
+
 	export_bmesh : BoolProperty(
 			name        = "Bounding geometry",
 			description = "Create mesh object for bounding geometry (if any)",
@@ -255,6 +261,7 @@ class Export_GMDC(bpy.types.Operator, ExportHelper):
 			'apply_transforms' : self.apply_transforms,
 			  'export_rigging' : self.export_rigging,
 			 'export_tangents' : self.export_tangents,
+			 'export_petdata' : self.export_petdata,
 			    'export_bmesh' : self.export_bmesh,
 			      'bmesh_name' : self.bmesh_name.strip(),
 			 'bmesh_threshold' : self.bmesh_threshold,
@@ -275,6 +282,7 @@ class Export_GMDC(bpy.types.Operator, ExportHelper):
 		box.prop(self, 'apply_transforms')
 		box.prop(self, 'export_rigging')
 		box.prop(self, 'export_tangents')
+		box.prop(self, 'export_petdata')
 		box.prop(self, 'export_morphs')
 		box.prop(self, 'align_normals')
 		if self.align_normals:
@@ -313,12 +321,18 @@ def register():
 	bpy.types.TOPBAR_MT_file_import.append(menu_import)
 	bpy.types.TOPBAR_MT_file_export.append(menu_export)
 
+	from .dnorm_editor import register_dnorm_tools
+	register_dnorm_tools()
+
 def unregister():
 	from bpy.utils import unregister_class
 	for cls in classes:
 		unregister_class(cls)
 	bpy.types.TOPBAR_MT_file_import.remove(menu_import)
 	bpy.types.TOPBAR_MT_file_export.remove(menu_export)
+
+	from .dnorm_editor import unregister_dnorm_tools
+	unregister_dnorm_tools()
 
 if __name__ == "__main__":
 	register()

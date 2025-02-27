@@ -86,6 +86,7 @@ def begin_export(filename, scene, settings):
 	log( '--Apply transforms:', settings['apply_transforms'] )
 	log( '--Export rigging:  ', settings['export_rigging'] )
 	log( '--Export tangents: ', settings['export_tangents'] )
+	log( '--Export EP4 data: ', settings['export_petdata'] )
 	log( '--Export bounding geometry:', settings['export_bmesh'] )
 	log( '--Bounding mesh name:', settings['bmesh_name'] and '"%s"' % settings['bmesh_name'] or 'none' )
 	log( '--Weight threshold:', settings['bmesh_threshold'] )
@@ -201,6 +202,10 @@ def export_geometry(scene, settings):
 	DATA_GROUPS = [] ; INDEX_GROUPS = []
 
 	MORPH_NAMES = [] # [index] -> name
+
+
+	# TODO: try and add the empty elements found in default GMDCs.
+
 
 	log( 'Main geometry' )
 
@@ -323,10 +328,77 @@ def export_geometry(scene, settings):
 					else:
 						mapped_indices.append(bone_idx)
 				return tuple(mapped_indices)
+		
+
+		# pet data
+		#
+
+		# Vertex ID
+		vertexID_attribute = mesh.attributes.get("VertexID")
+		if settings['export_petdata'] and vertexID_attribute != None:
+
+			log( '--Processing EP4 VertexID...' )
+
+			attribute_domain = mesh.attributes["VertexID"].domain
+
+			if attribute_domain == 'CORNER':
+				flat_vertexID = [0] * len(mesh.attributes["VertexID"].data) * 4
+				mesh.attributes["VertexID"].data.foreach_get('color', flat_vertexID)
+				mesh_vertexID  = [tuple(chunk(sublist, 4)) for sublist in tuple(chunk(list(map(int, flat_vertexID)), 12))]
+
+			elif attribute_domain == 'POINT':
+				flat_vertexID = [0] * len(mesh.attributes["VertexID"].data) * 4
+				mesh.attributes["VertexID"].data.foreach_get('color', flat_vertexID)
+				grouped_vertexID = tuple(chunk(list(map(int, flat_vertexID)), 4))
+
+				mesh_vertexID = []
+				for tri in mesh.loop_triangles:
+					tri_norm = []
+					for loop_index in tri.loops:
+						vertex_index = mesh.loops[loop_index].vertex_index
+						tri_norm.append(tuple(grouped_vertexID[vertex_index]))
+					mesh_vertexID.append(tri_norm)
+			else:
+				error("Error! Invalid VertexID mesh attribute domain '{}'.".format(attribute_domain))
+				return False
+		else:
+			mesh_vertexID = repeat((None, None, None))
+
+		# RegionMask
+		regionMask_attribute = mesh.attributes.get("RegionMask")
+		if settings['export_petdata'] and regionMask_attribute != None:
+
+			log( '--Processing EP4 RegionMask...' )
+
+			attribute_domain = mesh.attributes["RegionMask"].domain
+
+			if attribute_domain == 'CORNER':
+				flat_regionMask = [0] * len(mesh.attributes["RegionMask"].data) * 4
+				mesh.attributes["RegionMask"].data.foreach_get('color', flat_regionMask)
+				mesh_regionMask  = [tuple(chunk(sublist, 4)) for sublist in chunk(list(map(int, flat_regionMask)), 12)]
+
+			elif attribute_domain == 'POINT':
+				flat_regionMask = [0] * len(mesh.attributes["RegionMask"].data) * 4
+				mesh.attributes["RegionMask"].data.foreach_get('color', flat_regionMask)
+				grouped_regionMask = chunk(list(map(int, flat_regionMask)), 4)
+
+				mesh_regionMask = []
+				for tri in mesh.loop_triangles:
+					tri_norm = []
+					for loop_index in tri.loops:
+						vertex_index = mesh.loops[loop_index].vertex_index
+						tri_norm.append(tuple(grouped_regionMask[vertex_index]))
+					mesh_regionMask.append(tri_norm)
+			else:
+				error("Error! Invalid RegionMask mesh attribute domain '{}'.".format(attribute_domain))
+				return False
+		else:
+			mesh_regionMask = repeat((None, None, None))
+
 
 		all_vertices = [] # for non-indexed vertices
 
-		for tri, tri_norm, tri_uv, tri_tan in zip(mesh.loop_triangles, mesh_normals, mesh_tex_coords, mesh_tangents):
+		for tri, tri_norm, tri_uv, tri_tan, tri_vid, tri_rm in zip(mesh.loop_triangles, mesh_normals, mesh_tex_coords, mesh_tangents, mesh_vertexID, mesh_regionMask):
 
 			verts = [tuple(mesh.vertices[idx].co + obj_loc) for idx in tri.vertices]
 
@@ -355,11 +427,12 @@ def export_geometry(scene, settings):
 				weights = [(), (), ()]
 
 			# add vertices to list
-			all_vertices.extend(zip(verts, tri_norm, tri_uv, bones, weights, tri_tan))
+			all_vertices.extend(zip(verts, tri_norm, tri_uv, bones, weights, tri_tan, tri_vid, tri_rm))
 
 		#<- triangles
 
-		del mesh_tex_coords, mesh_tangents
+		del mesh_tex_coords, mesh_tangents, mesh_vertexID, mesh_regionMask
+
 
 		#
 		# morphs / vertex animations
@@ -379,6 +452,10 @@ def export_geometry(scene, settings):
 
 			mesh_morphs = [] # morph indices of current mesh object
 			first_new_morph_index = None # first new morph that is not present in MORPH_NAMES
+
+
+			# TODO: try using 1 rather than 0 as the first morph's index.
+
 
 			dVerts = []
 			dNorms = []
@@ -411,22 +488,65 @@ def export_geometry(scene, settings):
 
 				mesh.calc_loop_triangles()
 
+
+				# TODO: do not take into account the empty :: morph.
+
+
 				if morphing == 2:
-					# calc normals for this shape
-					if bpy.app.version < (4, 1, 0):
-						# in blender 4.1+ this function has been removed and normals are always calculated
-						mesh.calc_normals_split()
-					
+
+					# Morph normals from custom mesh attributes.
+					delta_attribute_name = key_block.name + "_dN"
+					delta_normal_attribute = mesh.attributes.get(delta_attribute_name)
+
 					mesh_normals = []
-					for tri in mesh.loop_triangles:
-						tri_norm = []
-						for loop_idx in tri.loops:
-							tri_norm.append(tuple(mesh.loops[loop_idx].normal))
-						mesh_normals.append(tri_norm)
+					need_calc = []
+
+					if delta_normal_attribute == None:
+						log("\x20\x20\x20--No corresponding mesh attribute exist. Using the base mesh normals instead.".format(key_block.name))	
+						
+						# calc normals for this shape
+						if bpy.app.version < (4, 1, 0):
+							# in blender 4.1+ this function has been removed and normals are always calculated
+							mesh.calc_normals_split()
+					
+						for tri in mesh.loop_triangles:
+							tri_norm = []
+							for loop_idx in tri.loops:
+								tri_norm.append(tuple(mesh.loops[loop_idx].normal))
+							mesh_normals.append(tri_norm)
+							need_calc.append(True)
+
+					else:
+						log("\x20\x20\x20--Morph normals will be collected from the mesh attribute '{}'.".format(delta_attribute_name))
+
+						delta_attribute_domain = mesh.attributes[delta_attribute_name].domain
+
+						if delta_attribute_domain == 'CORNER':
+							flat_deltas = [0] * len(mesh.attributes[delta_attribute_name].data) * 3
+							mesh.attributes[delta_attribute_name].data.foreach_get('vector', flat_deltas)
+							mesh_normals = [tuple(chunk(sublist, 3)) for sublist in chunk(flat_deltas, 9)]
+							need_calc = [False] * len(mesh_normals)
+
+						elif delta_attribute_domain == 'POINT':
+							flat_deltas = [0] * len(mesh.attributes[delta_attribute_name].data) * 3
+							mesh.attributes[delta_attribute_name].data.foreach_get('vector', flat_deltas)
+							grouped_normals = chunk(flat_deltas, 3)
+
+							for tri in mesh.loop_triangles:
+								tri_norm = []
+								for loop_index in tri.loops:
+									vertex_index = mesh.loops[loop_index].vertex_index
+									tri_norm.append(tuple(grouped_normals[vertex_index]))
+								mesh_normals.append(tri_norm)
+								need_calc.append(False)
+
+						else:
+							error("Error! Invalid morph normals mesh attribute domain '{}' for '{}'.".format(attribute_domain, attribute_name))
+							return False
 
 					if settings['export_tangents']:
 						# otherwise there will be problem with geometry indexing
-						mesh.calc_tangents(uvmap=uv_layer1.name)
+						mesh.calc_tangents(uvmap=mesh.uv_layers[0].name) # Using uv_layer1 too often failed.
 
 				# add difference arrays
 				dv = [] ; dVerts.append(dv)
@@ -435,12 +555,15 @@ def export_geometry(scene, settings):
 				# loop through all triangles and compute vertex differences
 				j = 0
 				if morphing == 2:
-					for tri, tri_norm in zip(mesh.loop_triangles, mesh_normals):
+					for tri, tri_norm, calc in zip(mesh.loop_triangles, mesh_normals, need_calc):
 						verts = [(key_block.data[idx].co + obj_loc) for idx in tri.vertices]
 						norms = map(BlenderVector, tri_norm)
 						for co, no in zip(verts, norms):
 							dv.append(tuple(co - BlenderVector(all_vertices[j][0])))
-							dn.append(tuple(no - BlenderVector(all_vertices[j][1])))
+							if calc:
+								dn.append(tuple(no - BlenderVector(all_vertices[j][1])))
+							else:
+								dn.append(tuple(no))
 							j+= 1
 				else:
 					for tri in mesh.loop_triangles:
@@ -448,6 +571,7 @@ def export_geometry(scene, settings):
 						for co in verts:
 							dv.append(tuple(co - BlenderVector(all_vertices[j][0])))
 							j+= 1
+
 				assert j == len(all_vertices)
 
 			log( '\x20\x20--Packing...' )
@@ -524,6 +648,7 @@ def export_geometry(scene, settings):
 
 		#<- morphing
 
+
 		#
 		# index geometry
 		#
@@ -543,7 +668,7 @@ def export_geometry(scene, settings):
 
 		del all_vertices
 
-		V, N, T, B, W, X, K, dV, dN = [*map(list, zip(*unique_verts))] + [None for i in range(3-2*morphing)]
+		V, N, T, B, W, X, VId, RM, K, dV, dN = [*map(list, zip(*unique_verts))] + [None for i in range(3-2*morphing)]
 
 		# separate uv layers (if needed)
 		if not mesh.uv_layers:
@@ -557,34 +682,39 @@ def export_geometry(scene, settings):
 		del unique_verts, T
 
 		#
-		# add new data group or extend an existing one
+		# create data group
 		#
 
 		# does the mesh have rigging data ?
 		rigging = rigging and any(B)
 
-		# try to find a suitable data group
-		group = None
-		for i, g in enumerate(DATA_GROUPS):
-			b1 = (bool(g.bones) == rigging) # same rigging state
-			if morphing:
-				b2 = sum(bool(x) for x in g.dVerts) == len(dV[0]) # same number of difference arrays
-			else:
-				b2 = not bool(g.dVerts[0]) # no difference arrays
-			b3 = (bool(g.tex_coords) == bool(T1)) # presence of UV layer
-			b4 = (bool(g.tex_coords2) == bool(T2)) # presence of additional UV layer
-			if b1 and b2 and b3 and b4:
-				# found
-				ref_group, group = i, g
-				break
-		if group:
-			k = group.count
-			indices = list(map(lambda x: x+k, indices)) # shift indices
-			log( '--Extending group # %i...' % ref_group )
-		else:
-			ref_group = len(DATA_GROUPS)
-			group = DataGroup() ; DATA_GROUPS.append(group)
-			log( '--Adding new group # %i...' % ref_group )
+		# # try to find a suitable data group
+		# group = None
+		# for i, g in enumerate(DATA_GROUPS):
+		# 	b1 = (bool(g.bones) == rigging) # same rigging state
+		# 	if morphing:
+		# 		b2 = sum(bool(x) for x in g.dVerts) == len(dV[0]) # same number of difference arrays
+		# 	else:
+		# 		b2 = not bool(g.dVerts[0]) # no difference arrays
+		# 	b3 = (bool(g.tex_coords) == bool(T1)) # presence of UV layer
+		# 	b4 = (bool(g.tex_coords2) == bool(T2)) # presence of additional UV layer
+		# 	if b1 and b2 and b3 and b4:
+		# 		# found
+		# 		ref_group, group = i, g
+		# 		break
+		# if group:
+		# 	k = group.count
+		# 	indices = list(map(lambda x: x+k, indices)) # shift indices
+		# 	log( '--Extending group # %i...' % ref_group )
+		# else:
+		# 	ref_group = len(DATA_GROUPS)
+		# 	group = DataGroup() ; DATA_GROUPS.append(group)
+		# 	log( '--Adding new group # %i...' % ref_group )
+
+		# Always create a new data group.
+		ref_group = len(DATA_GROUPS)
+		group = DataGroup() ; DATA_GROUPS.append(group)
+		log( '--Adding new group # %i...' % ref_group )
 
 		# add vertices to group
 		#
@@ -599,6 +729,12 @@ def export_geometry(scene, settings):
 			group.weights.extend(W)
 		if settings['export_tangents']:
 			group.tangents.extend(X)
+
+		if any(VId):
+			group.vertexID.extend(VId)
+		if any(RM):
+			group.regionMask.extend(RM)
+
 		if morphing:
 			group.keys.extend(K)
 			dV = [*map(list, zip(*dV)), [], [], []]
@@ -606,10 +742,10 @@ def export_geometry(scene, settings):
 				v.extend(w)
 			if morphing > 1:
 				dN = [*map(list, zip(*dN)), [], [], []]
-				for v, w in zip(group.dNorms, dV):
+				for v, w in zip(group.dNorms, dN):
 					v.extend(w)
 
-		del V, N, T1, T2, B, W, X, K, dV, dN
+		del V, N, T1, T2, B, W, X, K, VId, RM, dV, dN
 
 		k = group.count
 		group.count = len(group.vertices)
@@ -813,6 +949,10 @@ def export_geometry(scene, settings):
 						group.normals[i] = normal
 						count+= 1
 			log( '--Replaced %i normals' % count )
+
+
+	# TODO: align normals for morphs also.
+
 
 	return GeometryData(DATA_GROUPS, INDEX_GROUPS, inverse_transforms, MORPH_NAMES, static_bmesh, dynamic_bmesh)
 
