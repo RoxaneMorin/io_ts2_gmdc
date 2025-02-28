@@ -8,13 +8,17 @@ from .dnorm_tools import (
     current_to_original_normals,
     add_dN_to_current,
     original_plus_dN_to_current,
-    retarget_dN_to_current_normals
+    retarget_dN_to_current_normals,
+    set_dN_from_current_vs_original,
+    clear_dNorms,
+    clear_dNorms_for_vertex_group,
+    clear_dNorms_excluding_vertex_group,
+    switch_dN_domain
     )
 
 
 
 # GLOBAL PARAMETERS
-oN_attribute_name = "OriginalNormals"
 oN_attribute_name = "OriginalNormals"
 currentNtoC_attribute_name = "CurrentNormals_AsColours"
 oNtoC_attribute_name = "OriginalNormals_AsColours"
@@ -24,6 +28,13 @@ dNtoC_attribute_suffix = "_NtoC"
 
 
 # HELPERS
+def get_valid_shape_key_names(context):
+    obj = context.object
+    if obj and obj.type == 'MESH' and obj.data.shape_keys:
+        # Ignore the Basis and :: keys.
+        return [key.name for key in obj.data.shape_keys.key_blocks[1:] if key.name != "::"]
+    return ["None"]
+
 def get_shape_key_names(self, context):
     obj = context.object
     if obj and obj.type == 'MESH' and obj.data.shape_keys:
@@ -88,6 +99,10 @@ class dNormsTools_properties(types.PropertyGroup):
 
 
 # OPERATORS
+
+# ORIGINAL NORMALS
+
+# SET CURRENT
 class dNormsTools_OT_oN_to_current_normals(bpy.types.Operator):
     bl_idname = "dnorms_tools.on_to_current_normals"
     bl_label = "Copy OriginalNormals Attribute to Current Mesh Normals."
@@ -106,6 +121,7 @@ class dNormsTools_OT_oN_to_current_normals(bpy.types.Operator):
         return {'FINISHED'} 
 
 
+# SAVE ATTRIBUTE
 class dNormsTools_OT_current_normals_to_oN(bpy.types.Operator):
     bl_idname = "dnorms_tools.current_normals_to_on"
     bl_label = "Copy Current Mesh Normals to OriginalNormals Attribute"
@@ -123,6 +139,9 @@ class dNormsTools_OT_current_normals_to_oN(bpy.types.Operator):
         return {'FINISHED'}
 
 
+# DNORMS
+
+# SET CURRENT
 class dNormsTools_OT_add_dN_to_current(bpy.types.Operator):
     bl_idname = "dnorms_tools.add_dn_to_current"
     bl_label = "Add dN Attribute to Current Mesh Normals."
@@ -140,7 +159,6 @@ class dNormsTools_OT_add_dN_to_current(bpy.types.Operator):
 
         print("The values of the attribute '{}' have been added to the current face normals.".format(dN_name))
         return {'FINISHED'} 
-
 
 class dNormsTools_OT_set_current_from_oN_plus_dN(bpy.types.Operator):
     bl_idname = "dnorms_tools.set_current_from_on_plus_dn"
@@ -162,6 +180,29 @@ class dNormsTools_OT_set_current_from_oN_plus_dN(bpy.types.Operator):
         return {'FINISHED'} 
 
 
+# SAVE ATTRIBUTE
+class dNormsTools_OT_set_dN_from_current_vs_oN(bpy.types.Operator):
+    bl_idname = "dnorms_tools.set_dn_from_current_vs_on"
+    bl_label = "Save Delta Between Current and Original Normals to dN Attribute."
+    bl_description = "Saves the deltas between the original and current mesh normals into the target morph normal attribute."
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        has_oN = context.object.dnorm_props.oN_attribute
+        dN_name = context.object.dnorm_props.dN_attributtes
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and has_oN and dN_name != "None"
+    
+    def execute(self, context):
+        # TODO: allow for morphs that don't yet have a dN attribute.
+        dN_name = context.object.dnorm_props.dN_attributtes
+        set_dN_from_current_vs_original(context, dN_name, oN_attribute_name)
+
+        print("Set the contents of the morph normal attribute '{}' to the deltas between '{}' and the current face normals.".format(dN_name, oN_attribute_name))
+        return {'FINISHED'} 
+
+
+# EDIT
 class dNormsTools_OT_retarget_dN_to_current(bpy.types.Operator):
     bl_idname = "dnorms_tools.retarget_dn_to_current"
     bl_label = "Retarget Morph Deltas to Current Normals."
@@ -182,9 +223,7 @@ class dNormsTools_OT_retarget_dN_to_current(bpy.types.Operator):
         return {'FINISHED'} 
 
 
-
-
-
+# CLEAR
 class dNormsTools_OT_clear_dN(bpy.types.Operator):
     bl_idname = "dnorms_tools.clear_dn"
     bl_label = "Reset Target Morph Normals"
@@ -196,18 +235,17 @@ class dNormsTools_OT_clear_dN(bpy.types.Operator):
         dN_name = context.object.dnorm_props.dN_attributtes
         return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and dN_name != "None"
     
-    def dN_name(self, context):
+    def execute(self, context):
         dN_name = context.object.dnorm_props.dN_attributtes
         clear_dNorms(context, dN_name)
         
-        print("Reset the contents of the morph normal attribute '{}'.".format(dN_name))
+        print("Cleared the contents of the morph normal attribute '{}'.".format(dN_name))
         return {'FINISHED'}
-
 
 class dNormsTools_OT_clear_dN_for_vg(bpy.types.Operator):
     bl_idname = "dnorms_tools.clear_dn_for_vg"
     bl_label = "Reset Target Morph Normals for Vertex Group"
-    bl_description = "Set the values of the target morph normal attribute to zero for the given vertex group.\nVertex group values of less than one attenuate rather than nullify."
+    bl_description = "Set the values of the target morph normal attribute to zero for the given vertex group.\nVertex group values of less than one attenuate rather than nullify"
     bl_options = {'REGISTER', 'UNDO'}
     
     @classmethod
@@ -221,9 +259,8 @@ class dNormsTools_OT_clear_dN_for_vg(bpy.types.Operator):
         vertex_group_name = context.object.dnorm_props.vertex_groups
         clear_dNorms_for_vertex_group(context, dN_name, vertex_group_name)
         
-        print("Reset the contents of the morph normal attribute '{}' for the vertex group '{}'.".format(dN_name, vertex_group_name))
+        print("Cleared the contents of the morph normal attribute '{}' for the vertex group '{}'.".format(dN_name, vertex_group_name))
         return {'FINISHED'}
-
 
 class dNormsTools_OT_clear_dN_excluding_vg(bpy.types.Operator):
     bl_idname = "dnorms_tools.clear_dn_excluding_vg"
@@ -242,35 +279,67 @@ class dNormsTools_OT_clear_dN_excluding_vg(bpy.types.Operator):
         vertex_group_name = context.object.dnorm_props.vertex_groups
         clear_dNorms_excluding_vertex_group(context, dN_name, vertex_group_name)
         
-        print("Reset the contents of the morph normal attribute '{}', excluding the vertex group '{}'.".format(dN_name, vertex_group_name))
+        print("Cleared the contents of the morph normal attribute '{}', excluding the vertex group '{}'.".format(dN_name, vertex_group_name))
         return {'FINISHED'}
 
 
-class dNormsTools_OT_set_dN_from_current_vs_oN(bpy.types.Operator):
-    bl_idname = "dnorms_tools.set_dn_from_current_vs_on"
-    bl_label = "Save Delta Between Current and Original Normals to Target Morph Normals."
-    bl_description = "Saves the deltas between the original and current mesh normals into the target morph normal attribute."
+class dNormsTools_OT_switch_oN_domain(bpy.types.Operator):
+    bl_idname = "dnorms_tools.change_on_domain"
+    bl_label = "Change OriginalNormals Domain"
+    bl_description = "Switches the domain of the OriginalNormals attribute from Vertex to Face Corner and vice versa."
     bl_options = {'REGISTER', 'UNDO'}
     
     @classmethod
     def poll(cls, context):
         has_oN = context.object.dnorm_props.oN_attribute
-        dN_name = context.object.dnorm_props.dN_attributtes
-        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and has_oN and dN_name != "None"
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and has_oN
     
     def execute(self, context):
-        # TODO: allow for morphs that don't yet have a dN attribute.
+        initial_domain = context.object.data.attributes[oN_attribute_name].domain
+        resulting_domain = switch_dN_domain(context, oN_attribute_name)
+        
+        print("Changed the domain of the attribute '{}' from {} to {}.".format(oN_attribute_name, initial_domain, resulting_domain))
+        return {'FINISHED'}
+
+
+class dNormsTools_OT_switch_dN_domain(bpy.types.Operator):
+    bl_idname = "dnorms_tools.change_dn_domain"
+    bl_label = "Change dN Domain"
+    bl_description = "Switches the domain of this moprh normal attribute from Vertex to Face Corner and vice versa."
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
         dN_name = context.object.dnorm_props.dN_attributtes
-        set_dN_from_current_vs_original(context, dN_name)
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and dN_name != "None"
+    
+    def execute(self, context):
+        dN_name = context.object.dnorm_props.dN_attributtes
+        initial_domain = context.object.data.attributes[dN_name].domain
+        resulting_domain = switch_dN_domain(context, dN_name)
+        
+        print("Changed the domain of the attribute '{}' from {} to {}.".format(dN_name, initial_domain, resulting_domain))
+        return {'FINISHED'}
 
-        print("Set the contents of the morph normal attribute '{}' to the deltas between '{}' and the current face normals.".format(dN_name, oN_attribute_name))
-        return {'FINISHED'} 
 
-
-
-
-
-
+class dNormsTools_add_missing_attributes(bpy.types.Operator):
+    bl_idname = "dnorms_tools.add_missing_attributes"
+    bl_label = "Add Missing Attributes"
+    bl_description = "Creates empty attributes for the shape keys that lack them, as well as OriginalNormals if necessary."
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        # TODO: only display if necessary, such as oN or any dN not existing.
+        has_oN = context.object.dnorm_props.oN_attribute
+        valid_shape_keys = context.object.dnorm_props.shape_keys
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and valid_shape_keys != "None"
+    
+    def execute(self, context):
+        add_missing_attributes(context)
+        
+        #print("Changed the domain of the attribute '{}' from {} to {}.".format(dN_name, initial_domain, resulting_domain))
+        return {'FINISHED'}
 
 
 
@@ -305,10 +374,21 @@ class dNormsTools_panel(bpy.types.Panel):
         else:
             oN_label_row.label(icon='CHECKBOX_DEHLT')
 
-        oN_opps_row = oN_box.row()
-        oN_opps_row.operator(dNormsTools_OT_oN_to_current_normals.bl_idname, text="Original to Current Normals")
-        oN_opps_row.operator(dNormsTools_OT_current_normals_to_oN.bl_idname, text="Current to Original Normals")
-        
+        oN_ops_row = oN_box.row()
+        oN_ops_row.operator(dNormsTools_OT_oN_to_current_normals.bl_idname, text="Original to Current Normals", icon='EXPORT')
+        oN_ops_row.operator(dNormsTools_OT_current_normals_to_oN.bl_idname, text="Current to Original Normals", icon='IMPORT')
+
+        if context.object.dnorm_props.oN_attribute:
+            if context.object.data.attributes[oN_attribute_name].domain == 'CORNER':
+                text = "Switch Attribute Domain to Vertex"
+                icon = 'NORMALS_VERTEX'
+            else:
+                text = "Switch Attribute Domain to Face Corner"
+                icon = 'NORMALS_VERTEX_FACE'
+        else:
+            text="Switch Attribute Domain"
+            icon = 'QUESTION'
+        oN_box.operator(dNormsTools_OT_switch_oN_domain.bl_idname, text=text, icon=icon)
         
 
         # Section: dN
@@ -318,30 +398,40 @@ class dNormsTools_panel(bpy.types.Panel):
         dN_label_row.label(text="Morph Normal Deltas", icon='ORIENTATION_NORMAL')
         dN_label_row.prop(data=props, property="dN_attributtes", text="target")
 
-        dN_current_box = dN_box.box()
-        dN_current_box.operator(dNormsTools_OT_add_dN_to_current.bl_idname, text="Add Delta to Current Normals")
-        dN_current_box.operator(dNormsTools_OT_set_current_from_oN_plus_dN.bl_idname, text="Original + Delta to Current Normals")
+        dN_current_row = dN_box.row()
+        dN_current_row.operator(dNormsTools_OT_set_current_from_oN_plus_dN.bl_idname, text="Original + Delta to Current Normals", icon='EXPORT')
+        dN_current_row.operator(dNormsTools_OT_set_dN_from_current_vs_oN.bl_idname, text="Current - Original Normals to Delta", icon='IMPORT')
+        dN_box.operator(dNormsTools_OT_add_dN_to_current.bl_idname, text="Add Delta to Current Normals", icon='ADD')
 
+        dN_ops_box = dN_box.box()
+        dN_ops_box.operator(dNormsTools_OT_retarget_dN_to_current.bl_idname, text="Retarget Delta to Current Normals", icon='ORIENTATION_GIMBAL')
 
-
-        dN_box.operator(dNormsTools_OT_retarget_dN_to_current.bl_idname, text="Retarget Delta to Current Normals")
-
-
-        dN_box.operator(dNormsTools_OT_set_dN_from_current_vs_oN.bl_idname, text="Set from Delta Between Original and Current Normals")
-
+        dN_name = context.object.dnorm_props.dN_attributtes
+        if dN_name != "None":
+            if context.object.data.attributes[dN_name].domain == 'CORNER':
+                text = "Switch Attribute Domain to Vertex"
+                icon = 'NORMALS_VERTEX'
+            else:
+                text = "Switch Attribute Domain to Face Corner"
+                icon = 'NORMALS_VERTEX_FACE'
+        else:
+            text="Switch Attribute Domain"
+            icon = 'QUESTION'
+        dN_ops_box.operator(dNormsTools_OT_switch_dN_domain.bl_idname, text=text, icon=icon)
         
-
-        
-
-
 
         dN_clear_box = dN_box.box()
-        dN_clear_box.operator(dNormsTools_OT_clear_dN.bl_idname, text="Clear Target Morph Normals")
+        dN_clear_box.operator(dNormsTools_OT_clear_dN.bl_idname, text="Clear Delta", icon='TRASH')
         dN_vg_row = dN_clear_box.row()
         dN_vg_column = dN_vg_row.column()
         dN_vg_column.operator(dNormsTools_OT_clear_dN_for_vg.bl_idname, text="Clear Only", icon='CLIPUV_HLT')
         dN_vg_column.operator(dNormsTools_OT_clear_dN_excluding_vg.bl_idname, text="Clear Excluding", icon='CLIPUV_DEHLT')
         dN_vg_row.prop(data=props, property="vertex_groups", text="", icon='GROUP_VERTEX')
+
+        
+
+        dN_box.operator(dNormsTools_add_missing_attributes.bl_idname, text="Add Missing Attributes")
+
 
 
         # Section: NtoC
@@ -368,13 +458,16 @@ def register_dnorm_tools():
     # Classes
     bpy.utils.register_class(dNormsTools_OT_oN_to_current_normals)
     bpy.utils.register_class(dNormsTools_OT_current_normals_to_oN)
-    bpy.utils.register_class(dNormsTools_OT_clear_dN)
-    bpy.utils.register_class(dNormsTools_OT_clear_dN_for_vg)
-    bpy.utils.register_class(dNormsTools_OT_clear_dN_excluding_vg)
     bpy.utils.register_class(dNormsTools_OT_add_dN_to_current)
     bpy.utils.register_class(dNormsTools_OT_set_dN_from_current_vs_oN)
     bpy.utils.register_class(dNormsTools_OT_set_current_from_oN_plus_dN)
     bpy.utils.register_class(dNormsTools_OT_retarget_dN_to_current)
+    bpy.utils.register_class(dNormsTools_OT_clear_dN)
+    bpy.utils.register_class(dNormsTools_OT_clear_dN_for_vg)
+    bpy.utils.register_class(dNormsTools_OT_clear_dN_excluding_vg)
+    bpy.utils.register_class(dNormsTools_OT_switch_oN_domain)
+    bpy.utils.register_class(dNormsTools_OT_switch_dN_domain)
+    bpy.utils.register_class(dNormsTools_add_missing_attributes)
     bpy.utils.register_class(dNormsTools_panel)
 
 
@@ -386,13 +479,16 @@ def unregister_dnorm_tools():
     # Classes
     bpy.utils.unregister_class(dNormsTools_OT_oN_to_current_normals)
     bpy.utils.unregister_class(dNormsTools_OT_current_normals_to_oN)
-    bpy.utils.unregister_class(dNormsTools_OT_clear_dN)
-    bpy.utils.unregister_class(dNormsTools_OT_clear_dN_for_vg)
-    bpy.utils.unregister_class(dNormsTools_OT_clear_dN_excluding_vg)
     bpy.utils.unregister_class(dNormsTools_OT_add_dN_to_current)
     bpy.utils.unregister_class(dNormsTools_OT_set_dN_from_current_vs_oN)
     bpy.utils.unregister_class(dNormsTools_OT_set_current_from_oN_plus_dN)
     bpy.utils.unregister_class(dNormsTools_OT_retarget_dN_to_current)
+    bpy.utils.unregister_class(dNormsTools_OT_clear_dN)
+    bpy.utils.unregister_class(dNormsTools_OT_clear_dN_for_vg)
+    bpy.utils.unregister_class(dNormsTools_OT_clear_dN_excluding_vg)
+    bpy.utils.unregister_class(dNormsTools_OT_switch_oN_domain)
+    bpy.utils.unregister_class(dNormsTools_OT_switch_dN_domain)
+    bpy.utils.unregister_class(dNormsTools_add_missing_attributes)
     bpy.utils.unregister_class(dNormsTools_panel)
 
 
@@ -401,107 +497,22 @@ def unregister_dnorm_tools():
 
 
 
-def clear_dNorms(context, dN_name):
+
+
+def add_missing_attributes(context):
     obj = context.object
     mesh = obj.data
 
-    # Simply generate and assign an array of zeroes of the same length.
-    zeroes = [0] * len(mesh.attributes[dN_name].data) * 3
-    mesh.attributes[dN_name].data.foreach_set('vector', zeroes)
+    if oN_attribute_name not in mesh.attributes:
+        mesh.attributes.new(oN_attribute_name, 'FLOAT_VECTOR', 'CORNER')
+        # Set from current?
 
-    obj.data.update()
+    shape_key_names = get_valid_shape_key_names(context)
+    for key_name in shape_key_names:
+        dN_name = key_name + dN_attribute_suffix
+        if dN_name not in mesh.attributes:
+            mesh.attributes.new(dN_name, 'FLOAT_VECTOR', 'CORNER')
 
-
-def clear_dNorms_for_vertex_group(context, dN_name, vertex_group_name):
-    obj = context.object
-    mesh = obj.data
-
-    dN_attribute = mesh.attributes[dN_name]
-    vertex_group = obj.vertex_groups[vertex_group_name]
-
-    if dN_attribute.domain == 'POINT':
-        for vertex in mesh.vertices:
-            try:
-                vertex_dN = dN_attribute.data[vertex.index].vector
-                dN_weight = 1 - vertex_group.weight(vertex.index)
-                new_dN = [value * dN_weight for value in vertex_dN]
-                mesh.attributes[dN_name].data[vertex.index].vector = tuple(new_dN)
-            except:
-                pass
-
-    elif dN_attribute.domain == 'CORNER':
-        for loop in mesh.loops:
-            try:
-                vertex_dN = dN_attribute.data[loop.index].vector
-                dN_weight = 1 - vertex_group.weight(loop.vertex_index)
-                new_dN = [value * dN_weight for value in vertex_dN]
-                mesh.attributes[dN_name].data[loop.index].vector = tuple(new_dN)
-            except:
-                pass
-
-    obj.data.update()
-
-
-def clear_dNorms_excluding_vertex_group(context, dN_name, vertex_group_name):
-    obj = context.object
-    mesh = obj.data
-
-    dN_attribute = mesh.attributes[dN_name]
-    vertex_group = obj.vertex_groups[vertex_group_name]
-
-    if dN_attribute.domain == 'POINT':
-        for vertex in mesh.vertices:
-            try:
-                vertex_dN = dN_attribute.data[vertex.index].vector
-                dN_weight = vertex_group.weight(vertex.index)
-                new_dN = [value * dN_weight for value in vertex_dN]
-                mesh.attributes[dN_name].data[vertex.index].vector = tuple(new_dN)
-            except:
-                mesh.attributes[dN_name].data[vertex.index].vector = tuple([0.0, 0.0, 0.0])
-
-    elif dN_attribute.domain == 'CORNER':
-        for loop in mesh.loops:
-            try:
-                vertex_dN = dN_attribute.data[loop.index].vector
-                dN_weight = vertex_group.weight(loop.vertex_index)
-                new_dN = [value * dN_weight for value in vertex_dN]
-                mesh.attributes[dN_name].data[loop.index].vector = tuple(new_dN)
-            except:
-                mesh.attributes[dN_name].data[loop.index].vector = tuple([0.0, 0.0, 0.0])
-    
-    obj.data.update()
-
-
-def set_dN_from_current_vs_original(context, dN_name):
-    obj = context.object
-    mesh = obj.data
-    
-    if bpy.app.version < (4, 1, 0):
-        mesh.calc_normals_split()
-
-    if dN_name in mesh.attributes:
-        mesh.attributes.remove(mesh.attributes[dN_name])
-    mesh.attributes.new(dN_name, 'FLOAT_VECTOR', 'CORNER')
-
-    oN_attribute = mesh.attributes[oN_attribute_name]
-
-    if oN_attribute.domain == 'POINT':
-        for loop in mesh.loops:
-            current_normal = mesh.corner_normals[loop.index].vector
-            original_normal = oN_attribute.data[loop.vertex_index].vector
-            delta = current_normal - original_normal
-            mesh.attributes[dN_name].data[loop.index].vector = delta       
-
-    elif oN_attribute.domain == 'CORNER':
-        for loop in mesh.loops:
-            current_normal = mesh.corner_normals[loop.index].vector
-            original_normal = oN_attribute.data[loop.index].vector
-            delta = current_normal - original_normal
-            mesh.attributes[dN_name].data[loop.index].vector = delta
-
-    obj.data.update()
-
-
-
+   #dN_attribute_suffix
 
 
