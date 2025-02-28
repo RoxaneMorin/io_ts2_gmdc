@@ -33,16 +33,24 @@ def get_valid_shape_key_names(context):
     if obj and obj.type == 'MESH' and obj.data.shape_keys:
         # Ignore the Basis and :: keys.
         return [key.name for key in obj.data.shape_keys.key_blocks[1:] if key.name != "::"]
-    return ["None"]
+    return []
 
-def get_shape_key_names(self, context):
+def get_valid_dN_attribute_names(context):
+    obj = context.object
+    if obj and obj.type == 'MESH':
+        mesh = obj.data
+        return [attribute.name for attribute in mesh.attributes if dN_attribute_suffix in attribute.name]
+    return []
+
+
+def populate_shape_key_enum(self, context):
     obj = context.object
     if obj and obj.type == 'MESH' and obj.data.shape_keys:
         # Ignore the Basis and :: keys.
         return [(key.name, key.name, "") for key in obj.data.shape_keys.key_blocks[1:] if key.name != "::"]
     return [("None", "None", "No valid shape keys exist.")]
 
-def get_vertex_group_names(self, context):
+def populate_vertex_group_enum(self, context):
     groups = [("None", "None", "Do not use a vertex group.")]
     obj = context.object
     if obj and obj.type == 'MESH' and obj.vertex_groups:
@@ -50,14 +58,14 @@ def get_vertex_group_names(self, context):
     return groups
 
 
-def get_has_oN_attribute(self):
+def has_oN_attribute(self):
     obj = self.id_data
     if obj and obj.type == 'MESH':
         mesh = obj.data
         return oN_attribute_name in mesh.attributes
     return False
 
-def get_dN_attribute_names(self, context):
+def populate_dN_attribute_enum(self, context):
     obj = context.object
     if obj and obj.type == 'MESH':
         mesh = obj.data
@@ -67,14 +75,14 @@ def get_dN_attribute_names(self, context):
     return [("None", "None", "No valid attribute exists.")]
 
 
-def get_has_oNtoC_attribute(self):
+def has_oNtoC_attribute(self):
     obj = self.id_data
     if obj and obj.type == 'MESH':
         mesh = obj.data
         return oNtoC_attribute_name in mesh.attributes
     return False
 
-def get_NtoC_attribute_names(self, context):
+def populate_NtoC_attribute_enum(self, context):
     obj = context.object
     if obj and obj.type == 'MESH':
         mesh = obj.data
@@ -87,14 +95,14 @@ def get_NtoC_attribute_names(self, context):
 
 # PROPERTIES
 class dNormsTools_properties(types.PropertyGroup):
-    shape_keys: props.EnumProperty(name="Shape Keys", items=get_shape_key_names)
-    vertex_groups: props.EnumProperty(name="Vertex Groups", items=get_vertex_group_names)
+    shape_keys: props.EnumProperty(name="Shape Keys", items=populate_shape_key_enum)
+    vertex_groups: props.EnumProperty(name="Vertex Groups", items=populate_vertex_group_enum)
 
-    oN_attribute: props.BoolProperty(name="Original Normals Attribute", get=get_has_oN_attribute)
-    dN_attributtes: props.EnumProperty(name="Morph Normal Deltas Attributes", items=get_dN_attribute_names)
+    oN_attribute: props.BoolProperty(name="Original Normals Attribute", get=has_oN_attribute)
+    dN_attributtes: props.EnumProperty(name="Morph Normal Deltas Attributes", items=populate_dN_attribute_enum)
 
-    oNtoC_attribute: props.BoolProperty(name="Original Normals Colour Attribute", get=get_has_oNtoC_attribute)
-    dNtoC_attributes: props.EnumProperty(name="Morph Normals Colour Attributes", items=get_NtoC_attribute_names)
+    oNtoC_attribute: props.BoolProperty(name="Original Normals Colour Attribute", get=has_oNtoC_attribute)
+    dNtoC_attributes: props.EnumProperty(name="Morph Normals Colour Attributes", items=populate_NtoC_attribute_enum)
 
 
 
@@ -283,6 +291,9 @@ class dNormsTools_OT_clear_dN_excluding_vg(bpy.types.Operator):
         return {'FINISHED'}
 
 
+
+
+# SWITCH DOMAINS
 class dNormsTools_OT_switch_oN_domain(bpy.types.Operator):
     bl_idname = "dnorms_tools.change_on_domain"
     bl_label = "Change OriginalNormals Domain"
@@ -322,6 +333,8 @@ class dNormsTools_OT_switch_dN_domain(bpy.types.Operator):
         return {'FINISHED'}
 
 
+
+# ADD & DELETE ATTRIBUTES
 class dNormsTools_add_missing_attributes(bpy.types.Operator):
     bl_idname = "dnorms_tools.add_missing_attributes"
     bl_label = "Add Missing Attributes"
@@ -337,6 +350,25 @@ class dNormsTools_add_missing_attributes(bpy.types.Operator):
     
     def execute(self, context):
         add_missing_attributes(context)
+        
+        #print("Changed the domain of the attribute '{}' from {} to {}.".format(dN_name, initial_domain, resulting_domain))
+        return {'FINISHED'}
+
+
+class dNormsTools_delete_all_attributes(bpy.types.Operator):
+    bl_idname = "dnorms_tools.delete_all_attributes"
+    bl_label = "Delete All Attributes"
+    bl_description = "Delete all normal delta attributes, including OriginalNormals."
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        # TODO: only display if necessary, such as oN or any dN existing.
+        has_oN = context.object.dnorm_props.oN_attribute
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH"
+    
+    def execute(self, context):
+        delete_all_attributes(context)
         
         #print("Changed the domain of the attribute '{}' from {} to {}.".format(dN_name, initial_domain, resulting_domain))
         return {'FINISHED'}
@@ -431,6 +463,7 @@ class dNormsTools_panel(bpy.types.Panel):
         
 
         dN_box.operator(dNormsTools_add_missing_attributes.bl_idname, text="Add Missing Attributes")
+        dN_box.operator(dNormsTools_delete_all_attributes.bl_idname, text="Delete All Attributes")
 
 
 
@@ -468,6 +501,7 @@ def register_dnorm_tools():
     bpy.utils.register_class(dNormsTools_OT_switch_oN_domain)
     bpy.utils.register_class(dNormsTools_OT_switch_dN_domain)
     bpy.utils.register_class(dNormsTools_add_missing_attributes)
+    bpy.utils.register_class(dNormsTools_delete_all_attributes)
     bpy.utils.register_class(dNormsTools_panel)
 
 
@@ -489,6 +523,7 @@ def unregister_dnorm_tools():
     bpy.utils.unregister_class(dNormsTools_OT_switch_oN_domain)
     bpy.utils.unregister_class(dNormsTools_OT_switch_dN_domain)
     bpy.utils.unregister_class(dNormsTools_add_missing_attributes)
+    bpy.utils.unregister_class(dNormsTools_delete_all_attributes)
     bpy.utils.unregister_class(dNormsTools_panel)
 
 
@@ -513,6 +548,33 @@ def add_missing_attributes(context):
         if dN_name not in mesh.attributes:
             mesh.attributes.new(dN_name, 'FLOAT_VECTOR', 'CORNER')
 
-   #dN_attribute_suffix
+
+def delete_all_attributes(context):
+    obj = context.object
+    mesh = obj.data
+
+    if oN_attribute_name in mesh.attributes:
+        mesh.attributes.remove(mesh.attributes[oN_attribute_name])
+
+    attribute_names = get_valid_dN_attribute_names(context)
+    for attribute_name in attribute_names:
+        if attribute_name in mesh.attributes:
+            mesh.attributes.remove(mesh.attributes[attribute_name])
 
 
+
+# TODO: add the colour attributes to these?
+
+
+# TODO:
+#- (re)generate current norm colour attribute
+#- (re)generate original norm colour attribute
+#- (re)generate dnorm colour attribute
+
+#- print or display values somehow
+#(can we bundle a material with the script?)
+#https://blender.stackexchange.com/questions/147488/load-and-change-material-with-python-script
+
+#- copy attributes between meshes
+#(find closest vertex for vertices,
+#the tree thingie for face projection)
