@@ -185,6 +185,7 @@ def clear_dNorms(context, dN_name):
 
     obj.data.update()
 
+
 def clear_dNorms_for_vertex_group(context, dN_name, vertex_group_name):
     obj = context.object
     mesh = obj.data
@@ -272,3 +273,6 @@ def switch_dN_domain(context, attribute_name):
 
     obj.data.update()
     return mesh.attributes[attribute_name].domain
+
+
+# TODO: add vertex group masking to other functions.

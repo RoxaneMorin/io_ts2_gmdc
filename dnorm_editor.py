@@ -13,7 +13,8 @@ from .dnorm_tools import (
     clear_dNorms,
     clear_dNorms_for_vertex_group,
     clear_dNorms_excluding_vertex_group,
-    switch_dN_domain
+    switch_dN_domain,
+    convert_normal_to_color
     )
 
 
@@ -40,6 +41,13 @@ def get_valid_dN_attribute_names(context):
     if obj and obj.type == 'MESH':
         mesh = obj.data
         return [attribute.name for attribute in mesh.attributes if dN_attribute_suffix in attribute.name]
+    return []
+
+def get_valid_NtoC_attribute_names(context):
+    obj = context.object
+    if obj and obj.type == 'MESH':
+        mesh = obj.data
+        return [attribute.name for attribute in mesh.attributes if dNtoC_attribute_suffix in attribute.name]
     return []
 
 
@@ -338,7 +346,7 @@ class dNormsTools_OT_switch_dN_domain(bpy.types.Operator):
 class dNormsTools_add_missing_attributes(bpy.types.Operator):
     bl_idname = "dnorms_tools.add_missing_attributes"
     bl_label = "Add Missing Attributes"
-    bl_description = "Creates empty attributes for the shape keys that lack them, as well as OriginalNormals if necessary."
+    bl_description = "Create any missing normal delta and normal-to-colour attributes for all shape keys, as well as the original and current normals.\nThe OriginalNormals attribute is set with the current face normals; the normal deltas with zeroes"
     bl_options = {'REGISTER', 'UNDO'}
     
     @classmethod
@@ -349,16 +357,19 @@ class dNormsTools_add_missing_attributes(bpy.types.Operator):
         return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and valid_shape_keys != "None"
     
     def execute(self, context):
-        add_missing_attributes(context)
+        log = add_missing_attributes(context)
         
-        #print("Changed the domain of the attribute '{}' from {} to {}.".format(dN_name, initial_domain, resulting_domain))
+        output_string = "The following attributes were created:"
+        for entry in log:
+            output_string += "\n- {}".format(entry)
+        print(output_string)
         return {'FINISHED'}
 
 
 class dNormsTools_delete_all_attributes(bpy.types.Operator):
     bl_idname = "dnorms_tools.delete_all_attributes"
     bl_label = "Delete All Attributes"
-    bl_description = "Delete all normal delta attributes, including OriginalNormals."
+    bl_description = "Delete all normal delta and normal-to-colour attributes, including those of the original and current normals."
     bl_options = {'REGISTER', 'UNDO'}
     
     @classmethod
@@ -368,10 +379,80 @@ class dNormsTools_delete_all_attributes(bpy.types.Operator):
         return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH"
     
     def execute(self, context):
-        delete_all_attributes(context)
+        log = delete_all_attributes(context)
         
-        #print("Changed the domain of the attribute '{}' from {} to {}.".format(dN_name, initial_domain, resulting_domain))
+        output_string = "The following attributes were deleted:"
+        for entry in log:
+            output_string += "\n- {}".format(entry)
+        print(output_string)
         return {'FINISHED'}
+
+
+# NORMAL COLOURS
+class dNormsTools_regenerate_currentNtoC(bpy.types.Operator):
+    bl_idname = "dnorms_tools.regenerate_currentntoc"
+    bl_label = "Regenerate CurrentNormals_AsColours"
+    bl_description = "(Re)generate the CurrentNormals_AsColours attribute using the current face normals."
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH"
+    
+    def execute(self, context):
+        regenerate_currentNtoC(context)
+        
+        print("The attribute '{}' has been regenerated using the current mesh face normals.".format(currentNtoC_attribute_name))
+        return {'FINISHED'}
+    
+    
+class dNormsTools_regenerate_oNtoC(bpy.types.Operator):
+    bl_idname = "dnorms_tools.regenerate_ontoc"
+    bl_label = "Regenerate OriginalNormals_AsColour"
+    bl_description = "(Re)generate the OriginalNormals_AsColour attribute using the current OriginalNormals."
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        has_oN = context.object.dnorm_props.oN_attribute
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and has_oN
+    
+    def execute(self, context):
+        regenerate_oNtoC(context)
+        
+        print("The attribute '{}' has been regenerated using the current contents of '{}'.".format(oNtoC_attribute_name, oN_attribute_name))
+        return {'FINISHED'}
+
+
+class dNormsTools_regenerate_dNtoC(bpy.types.Operator):
+    bl_idname = "dnorms_tools.regenerate_dntoc"
+    bl_label = "Regenerate a Delta's Normals-to-Colour Attribute"
+    bl_description = "(Re)generate a morph normal delta's corresponding normals-to-colour attribute."
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        key_name = context.object.dnorm_props.shape_keys
+        try:
+            potential_mesh = context.object.data
+            dN_attribute_name = key_name + dN_attribute_suffix
+            if dN_attribute_name in potential_mesh.attributes:
+                dN_exists = True
+            else:
+                dN_exists = False
+        except:
+            dN_exists = False
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and dN_exists
+    
+    def execute(self, context):
+        key_name = context.object.dnorm_props.shape_keys
+        regenerate_dNtoC(context, key_name)
+        
+        dN_attribute_name = key_name + dN_attribute_suffix
+        dNtoC_attribute_name = key_name + dNtoC_attribute_suffix
+        print("The attribute '{}' has been regenerated using the current contents of '{}'.".format(dNtoC_attribute_name, dN_attribute_name))
+        return {'FINISHED'}
+
 
 
 
@@ -394,6 +475,11 @@ class dNormsTools_panel(bpy.types.Panel):
         props = obj.dnorm_props
         
         layout = self.layout
+
+
+        # Section: init
+        layout.operator(dNormsTools_add_missing_attributes.bl_idname, text="Add Missing Attributes")
+        layout.operator(dNormsTools_delete_all_attributes.bl_idname, text="Delete All Attributes")
 
 
         # Section: oN
@@ -422,6 +508,11 @@ class dNormsTools_panel(bpy.types.Panel):
             icon = 'QUESTION'
         oN_box.operator(dNormsTools_OT_switch_oN_domain.bl_idname, text=text, icon=icon)
         
+
+        # TODO: target from the shape keys instead??
+        # TODO: move switch attribute domain to a lil corner button if possible?
+        # TODO: shape key mask for all functions??
+
 
         # Section: dN
         dN_box = layout.box()
@@ -462,8 +553,7 @@ class dNormsTools_panel(bpy.types.Panel):
 
         
 
-        dN_box.operator(dNormsTools_add_missing_attributes.bl_idname, text="Add Missing Attributes")
-        dN_box.operator(dNormsTools_delete_all_attributes.bl_idname, text="Delete All Attributes")
+        
 
 
 
@@ -473,12 +563,14 @@ class dNormsTools_panel(bpy.types.Panel):
 
         NtoC_label_row.label(text="Normals as Colour Attributes", icon='COLOR')
 
-
+        NtoC_box.operator(dNormsTools_regenerate_currentNtoC.bl_idname, text="Regenerate CurrentNormals_AsColour")
+        NtoC_box.operator(dNormsTools_regenerate_oNtoC.bl_idname, text="Regenerate OriginalNormals_AsColour")
+        NtoC_box.operator(dNormsTools_regenerate_dNtoC.bl_idname, text="Regenerate dNtoC for:")
+        NtoC_box.prop(props, "shape_keys")
+        
 
         #layout.prop(props, "oNtoC_attribute")
         #layout.prop(props, "dNtoC_attributes")
-
-        #layout.prop(props, "shape_keys")
 
 
 
@@ -502,6 +594,9 @@ def register_dnorm_tools():
     bpy.utils.register_class(dNormsTools_OT_switch_dN_domain)
     bpy.utils.register_class(dNormsTools_add_missing_attributes)
     bpy.utils.register_class(dNormsTools_delete_all_attributes)
+    bpy.utils.register_class(dNormsTools_regenerate_currentNtoC)
+    bpy.utils.register_class(dNormsTools_regenerate_oNtoC)
+    bpy.utils.register_class(dNormsTools_regenerate_dNtoC)
     bpy.utils.register_class(dNormsTools_panel)
 
 
@@ -524,53 +619,172 @@ def unregister_dnorm_tools():
     bpy.utils.unregister_class(dNormsTools_OT_switch_dN_domain)
     bpy.utils.unregister_class(dNormsTools_add_missing_attributes)
     bpy.utils.unregister_class(dNormsTools_delete_all_attributes)
+    bpy.utils.unregister_class(dNormsTools_regenerate_currentNtoC)
+    bpy.utils.unregister_class(dNormsTools_regenerate_oNtoC)
+    bpy.utils.unregister_class(dNormsTools_regenerate_dNtoC)
     bpy.utils.unregister_class(dNormsTools_panel)
 
 
 
 # FUNCTIONS
 
-
-
-
-
 def add_missing_attributes(context):
     obj = context.object
     mesh = obj.data
 
+    log = []
+
+    if currentNtoC_attribute_name not in mesh.attributes:
+        mesh.attributes.new(currentNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+        update_currentNtoC(context)
+        log.append(currentNtoC_attribute_name)
+
     if oN_attribute_name not in mesh.attributes:
         mesh.attributes.new(oN_attribute_name, 'FLOAT_VECTOR', 'CORNER')
-        # Set from current?
+        current_to_original_normals(context, oN_attribute_name)
+        log.append(oN_attribute_name)
+
+    if oNtoC_attribute_name not in mesh.attributes:
+        mesh.attributes.new(oNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+        update_oNtoC(context)
+        log.append(oNtoC_attribute_name)
 
     shape_key_names = get_valid_shape_key_names(context)
     for key_name in shape_key_names:
-        dN_name = key_name + dN_attribute_suffix
-        if dN_name not in mesh.attributes:
-            mesh.attributes.new(dN_name, 'FLOAT_VECTOR', 'CORNER')
+        dN_attribute_name = key_name + dN_attribute_suffix
+        if dN_attribute_name not in mesh.attributes:
+            mesh.attributes.new(dN_attribute_name, 'FLOAT_VECTOR', 'CORNER')
+            log.append(dN_attribute_name)
 
+        dNtoC_attribute_name = key_name + dNtoC_attribute_suffix
+        if dNtoC_attribute_name not in mesh.attributes:
+            mesh.attributes.new(dNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+            update_dNtoC(context, dN_attribute_name, dNtoC_attribute_name)
+            log.append(dNtoC_attribute_name)
+    
+    obj.data.update()
+    return log
+    
 
 def delete_all_attributes(context):
     obj = context.object
     mesh = obj.data
 
+    log = []
+
+    if currentNtoC_attribute_name in mesh.attributes:
+        mesh.attributes.remove(mesh.attributes[currentNtoC_attribute_name])
+        log.append(currentNtoC_attribute_name)
+
     if oN_attribute_name in mesh.attributes:
         mesh.attributes.remove(mesh.attributes[oN_attribute_name])
+        log.append(oN_attribute_name)
 
-    attribute_names = get_valid_dN_attribute_names(context)
-    for attribute_name in attribute_names:
+    if oNtoC_attribute_name in mesh.attributes:
+        mesh.attributes.remove(mesh.attributes[oNtoC_attribute_name])
+        log.append(oNtoC_attribute_name)
+
+    dN_attribute_names = get_valid_dN_attribute_names(context)
+    for attribute_name in dN_attribute_names:
         if attribute_name in mesh.attributes:
             mesh.attributes.remove(mesh.attributes[attribute_name])
+            log.append(attribute_name)
+
+    NtoC_attribute_names = get_valid_NtoC_attribute_names(context)
+    for attribute_name in NtoC_attribute_names:
+        if attribute_name in mesh.attributes:
+            mesh.attributes.remove(mesh.attributes[attribute_name])
+            log.append(attribute_name)
+
+    obj.data.update()
+    return log
+    
+
+def update_currentNtoC(context):
+    obj = context.object
+    mesh = obj.data
+
+    if bpy.app.version < (4, 1, 0):
+        mesh.calc_normals_split()
+
+    for loop in mesh.loops:
+        normal = mesh.corner_normals[loop.index].vector
+        color_normal = convert_normal_to_color(normal)
+        mesh.attributes[currentNtoC_attribute_name].data[loop.index].color_srgb = color_normal
 
 
 
-# TODO: add the colour attributes to these?
+# TODO: handle the normal attributes being in point mode too
+
+def update_oNtoC(context):
+    obj = context.object
+    mesh = obj.data
+
+    oN = mesh.attributes[oN_attribute_name].data
+    for loop in mesh.loops:
+        normal = oN[loop.index].vector
+        color_normal = convert_normal_to_color(normal)
+        mesh.attributes[oNtoC_attribute_name].data[loop.index].color_srgb = color_normal
+    
+
+def update_dNtoC(context, dN_attribute_name, dNtoC_attribute_name):
+    obj = context.object
+    mesh = obj.data
+
+    for loop in mesh.loops:
+        normal = mesh.attributes[oN_attribute_name].data[loop.index].vector
+        delta = mesh.attributes[dN_attribute_name].data[loop.index].vector
+        dNormal = normal + delta
+        color_normal = convert_normal_to_color(dNormal)
+        mesh.attributes[dNtoC_attribute_name].data[loop.index].color_srgb = color_normal
+
+
+
+
+def regenerate_currentNtoC(context):
+    obj = context.object
+    mesh = obj.data
+
+    if currentNtoC_attribute_name in mesh.attributes:
+        mesh.attributes.remove(mesh.attributes[currentNtoC_attribute_name])
+    mesh.attributes.new(currentNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+    
+    update_currentNtoC(context)
+    
+    obj.data.update()
+
+
+def regenerate_oNtoC(context):
+    obj = context.object
+    mesh = obj.data
+
+    if oNtoC_attribute_name in mesh.attributes:
+        mesh.attributes.remove(mesh.attributes[oNtoC_attribute_name])
+    mesh.attributes.new(oNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+    
+    update_oNtoC(context)
+    
+    obj.data.update()
+
+
+
+def regenerate_dNtoC(context, key_name):
+    obj = context.object
+    mesh = obj.data
+    
+    dN_attribute_name = key_name + dN_attribute_suffix
+    dNtoC_attribute_name = key_name + dNtoC_attribute_suffix
+
+    if dNtoC_attribute_name in mesh.attributes:
+        mesh.attributes.remove(mesh.attributes[dNtoC_attribute_name])
+    mesh.attributes.new(dNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+
+    update_dNtoC(context, dN_attribute_name, dNtoC_attribute_name)
+    
+    obj.data.update()
 
 
 # TODO:
-#- (re)generate current norm colour attribute
-#- (re)generate original norm colour attribute
-#- (re)generate dnorm colour attribute
-
 #- print or display values somehow
 #(can we bundle a material with the script?)
 #https://blender.stackexchange.com/questions/147488/load-and-change-material-with-python-script

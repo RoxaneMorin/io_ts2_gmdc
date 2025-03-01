@@ -315,7 +315,7 @@ def import_geometry(scene, geometry, settings):
 			mesh.color_attributes["OriginalNormals_AsColours"].data.foreach_set('color_srgb', basis_normals_as_colors)
 
 
-			# TODO: see if we can skip the first/empty morph.
+			# TODO: see if we can create them as Corner attributes from the start.
 
 
 			for morph_idx, name in enumerate(geometry.morph_names):
