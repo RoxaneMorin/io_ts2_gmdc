@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 
-__all__ = ['original_to_current_normals', 'current_to_original_normals', 'add_dN_to_current', 'original_plus_dN_to_current', 'retarget_dN_to_current_normals', 'set_dN_from_current_vs_original', 'clear_dNorms', 'clear_dNorms_for_vertex_group', 'clear_dNorms_excluding_vertex_group', 'switch_dN_domain']
+__all__ = ['original_to_current_normals', 'current_to_original_normals', 'add_dN_to_current', 'original_plus_dN_to_current', 'retarget_dN_to_current_normals', 'set_dN_from_current_vs_original', 'clear_dNorms', 'clear_dNorms_for_vertex_group', 'clear_dNorms_excluding_vertex_group', 'switch_vector_attribute_domain']
 
 #-------------------------------------------------------------------------------
 
@@ -247,8 +247,8 @@ def clear_dNorms_excluding_vertex_group(context, dN_name, vertex_group_name):
 
 
 
-
-def switch_dN_domain(context, attribute_name):
+# DOMAIN SWITCH
+def switch_vector_attribute_domain(context, attribute_name):
     obj = context.object
     mesh = obj.data
 
