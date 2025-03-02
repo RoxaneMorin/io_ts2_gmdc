@@ -100,6 +100,12 @@ def populate_NtoC_attribute_enum(self, context):
     return [("None", "None", "No valid attribute exists.")]
 
 
+def is_valid_other_mesh(self, mesh):
+    obj = self.id_data
+    return mesh != obj.data
+
+
+
 
 # PROPERTIES
 class dNormsTools_properties(types.PropertyGroup):
@@ -111,6 +117,12 @@ class dNormsTools_properties(types.PropertyGroup):
 
     oNtoC_attribute: props.BoolProperty(name="Original Normals Colour Attribute", get=has_oNtoC_attribute)
     dNtoC_attributes: props.EnumProperty(name="Morph Normals Colour Attributes", items=populate_NtoC_attribute_enum)
+
+    preview_material: props.PointerProperty(name="Preview Material", type=types.Material)
+
+    other_mesh : props.PointerProperty(name="Source Mesh", type=types.Mesh, poll=is_valid_other_mesh)
+    
+    
 
 
 
@@ -455,6 +467,26 @@ class dNormsTools_regenerate_dNtoC(bpy.types.Operator):
 
 
 
+class dNormsTools_display_preview_material(bpy.types.Operator):
+    bl_idname = "dnorms_tools.display_preview_material"
+    bl_label = "Display Preview Material using an Attribute"
+    bl_description = ""
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH"
+    
+    def execute(self, context):
+        dN_name = context.object.dnorm_props.dN_attributtes
+        preview_material = context.object.dnorm_props.preview_material
+        
+        context.object.dnorm_props.preview_material = generate_preview_material(context, dN_name, preview_material)
+
+        #print("The attribute '{}' has been regenerated using the current contents of '{}'.".format(dNtoC_attribute_name, dN_attribute_name))
+        return {'FINISHED'}
+
+
 
 # UI
 class dNormsTools_panel(bpy.types.Panel):
@@ -551,8 +583,8 @@ class dNormsTools_panel(bpy.types.Panel):
         dN_vg_column.operator(dNormsTools_OT_clear_dN_excluding_vg.bl_idname, text="Clear Excluding", icon='CLIPUV_DEHLT')
         dN_vg_row.prop(data=props, property="vertex_groups", text="", icon='GROUP_VERTEX')
 
+        dN_box.operator(dNormsTools_display_preview_material.bl_idname, text="Display Preview Material")
         
-
         
 
 
@@ -567,6 +599,10 @@ class dNormsTools_panel(bpy.types.Panel):
         NtoC_box.operator(dNormsTools_regenerate_oNtoC.bl_idname, text="Regenerate OriginalNormals_AsColour")
         NtoC_box.operator(dNormsTools_regenerate_dNtoC.bl_idname, text="Regenerate dNtoC for:")
         NtoC_box.prop(props, "shape_keys")
+        
+
+        layout.prop(props, "preview_material")
+        layout.prop(props, "other_mesh")
         
 
         #layout.prop(props, "oNtoC_attribute")
@@ -597,6 +633,7 @@ def register_dnorm_tools():
     bpy.utils.register_class(dNormsTools_regenerate_currentNtoC)
     bpy.utils.register_class(dNormsTools_regenerate_oNtoC)
     bpy.utils.register_class(dNormsTools_regenerate_dNtoC)
+    bpy.utils.register_class(dNormsTools_display_preview_material)
     bpy.utils.register_class(dNormsTools_panel)
 
 
@@ -622,6 +659,7 @@ def unregister_dnorm_tools():
     bpy.utils.unregister_class(dNormsTools_regenerate_currentNtoC)
     bpy.utils.unregister_class(dNormsTools_regenerate_oNtoC)
     bpy.utils.unregister_class(dNormsTools_regenerate_dNtoC)
+    bpy.utils.unregister_class(dNormsTools_display_preview_material)
     bpy.utils.unregister_class(dNormsTools_panel)
 
 
@@ -784,11 +822,102 @@ def regenerate_dNtoC(context, key_name):
     obj.data.update()
 
 
+# TODO: link in to the originalnormals and normal to colours also.
+def generate_preview_material(context, attribute_name, preview_material):
+    obj = context.object
+    mesh = obj.data
+
+    if not preview_material:
+        preview_material_name = "{}_{}_attribute_previewer".format(obj.name, mesh.name)
+        preview_material = bpy.data.materials.new(name = preview_material_name)
+        
+        preview_material.use_nodes = True
+        nodes = preview_material.node_tree.nodes
+        links = preview_material.node_tree.links
+        preview_material.node_tree.nodes.clear()
+        
+        output_node = nodes.new(type="ShaderNodeOutputMaterial")
+        attribute_node = nodes.new(type="ShaderNodeAttribute")
+        links.new(attribute_node.outputs["Vector"], output_node.inputs["Surface"])
+    
+    else:
+        nodes = preview_material.node_tree.nodes
+        attribute_node = nodes["Attribute"]
+
+    attribute_node.attribute_name = attribute_name
+    
+    obj.active_material = preview_material
+    obj.data.update()
+        
+    return preview_material
+
+
+def test_vertex_search(context, other_mesh):
+    obj = context.object
+    mesh = obj.data
+    
+
+
+
+
 # TODO:
-#- print or display values somehow
-#(can we bundle a material with the script?)
-#https://blender.stackexchange.com/questions/147488/load-and-change-material-with-python-script
 
 #- copy attributes between meshes
 #(find closest vertex for vertices,
 #the tree thingie for face projection)
+
+
+
+## COPY BETWEEN MESHES
+
+# import mathutils
+# from mathutils import Vector
+
+# test_point = Vector([0.5, 0.25, 1.5])
+
+
+# # VERTEX SEARCH STUFF
+# from mathutils.kdtree import KDTree
+# tree_size = len(mesh.vertices)
+# kd_tree = KDTree(tree_size)
+# for vertex in mesh.vertices:
+#     kd_tree.insert(vertex.co, vertex.index)
+# kd_tree.balance()
+# # TODO: check if they are in global space / work with other meshes.
+
+# position, index, distance = kd_tree.find(test_point)
+# print("\nClosest vertex:")
+# print(position)
+# print(index)
+# print(distance)
+# print(mesh.vertices[index])
+
+
+# # FACE SEARCH STUFF
+# from mathutils.bvhtree import BVHTree
+# bhv_tree = BVHTree.FromObject(obj, context.evaluated_depsgraph_get())
+
+# position, normal, index, distance = bhv_tree.find_nearest(test_point)
+# print("\nClosest face:")
+# print(position)
+# print(normal)
+# print(index)
+# print(distance)
+# print(mesh.polygons[index])
+# print(mesh.polygons[index].vertices)
+# print(mesh.polygons[index].loop_indices)
+
+# #hit = bhv_tree.ray_cast(test_point, position - test_point)
+# #print("\nRaycast hit:")
+# #print(hit)
+
+# vertices = []
+# for i in mesh.polygons[index].vertices:
+#     vertices.append(mesh.vertices[i].co)   
+# #print(vertices)
+
+# from mathutils.interpolate import poly_3d_calc
+# weight = poly_3d_calc(vertices, position)
+
+# print("\nResulting weight:")
+# print(weight)
