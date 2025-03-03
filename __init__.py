@@ -321,7 +321,7 @@ def register():
 	bpy.types.TOPBAR_MT_file_import.append(menu_import)
 	bpy.types.TOPBAR_MT_file_export.append(menu_export)
 
-	from .dnorm_editor import register_dnorm_tools
+	from .attribute_editor import register_dnorm_tools
 	register_dnorm_tools()
 
 def unregister():
@@ -331,7 +331,7 @@ def unregister():
 	bpy.types.TOPBAR_MT_file_import.remove(menu_import)
 	bpy.types.TOPBAR_MT_file_export.remove(menu_export)
 
-	from .dnorm_editor import unregister_dnorm_tools
+	from .attribute_editor import unregister_dnorm_tools
 	unregister_dnorm_tools()
 
 if __name__ == "__main__":

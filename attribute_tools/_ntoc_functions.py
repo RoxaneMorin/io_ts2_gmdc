@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 
-__all__ = ['update_currentNtoC', 'update_oNtoC', 'update_dNtoC', 'regenerate_currentNtoC', 'regenerate_oNtoC', 'regenerate_all_dNtoCs', 'regenerate_dNtoC', 'switch_color_attribute_domain']
+__all__ = ['convert_normal_to_color', 'update_currentNtoC', 'update_oNtoC', 'update_dNtoC', 'regenerate_currentNtoC', 'regenerate_oNtoC', 'regenerate_all_dNtoCs', 'regenerate_dNtoC', 'switch_color_attribute_domain']
 
 #-------------------------------------------------------------------------------
 
@@ -15,13 +15,14 @@ from ._attribute_helpers import (
     populate_corner_attribute_values,
     populate_point_attribute_values
     )
-from ._ntoc_helpers import (
-    convert_normal_to_color
-    )
 
 
 
 # NORMALS TO COLOURS
+def convert_normal_to_color(normal: tuple[float, float, float]) -> list[float]:
+	return [(f + 1)/2 for f in normal] + [1.0]
+
+
 def update_currentNtoC(context, currentNtoC_attribute_name):
     obj = context.object
     mesh = obj.data

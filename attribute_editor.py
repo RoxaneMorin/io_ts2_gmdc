@@ -1,9 +1,10 @@
 
 import bpy
 from bpy import context, types, props
+import mathutils
 from mathutils import Vector
 
-from .dnorm_tools import (
+from .attribute_tools import (
     original_to_current_normals,
     current_to_original_normals,
     add_dN_to_current,
@@ -172,9 +173,27 @@ def populate_preview_material_targets_enum(self, context):
 
 
 
-def is_valid_other_mesh(context, mesh):
+def is_valid_source_object(context, source_obj):
+    if source_obj.type != 'MESH':
+        return False
+    
     obj = context.id_data
-    return mesh != obj.data
+    return source_obj.data != obj.data
+
+def populate_attribute_transfer_targets_enum(self, context):
+    source_obj = context.object.dnorm_props.source_obj
+    source_mesh = source_obj.data
+    targets = []
+
+    if source_mesh:
+        if oN_attribute_name in source_mesh.attributes:
+            targets.extend([(oN_attribute_name, oN_attribute_name, "The mesh's original normal attribute.")])
+        targets.extend([(attribute.name, attribute.name, "") for attribute in source_mesh.attributes if dN_attribute_suffix in attribute.name])
+        
+    if len(targets) > 0:
+        return targets
+    else:
+        return [("None", "None", "No valid attribute exists.")]
 
 
 
@@ -211,12 +230,11 @@ class dNormsTools_properties(types.PropertyGroup):
     vertex_groups: props.EnumProperty(name="Vertex Groups", items=populate_vertex_group_enum)
 
     preview_material_targets: props.EnumProperty(name="Preview Material Targets", items=populate_preview_material_targets_enum)
-        
     preview_material: props.PointerProperty(name="Preview Material", type=types.Material)
     previous_material: props.PointerProperty(name="Previously Active Material", type=types.Material)
 
-    other_mesh : props.PointerProperty(name="Source Mesh", type=types.Mesh, poll=is_valid_other_mesh)
-    
+    source_obj : props.PointerProperty(name="Source Object", type=types.Object, poll=is_valid_source_object)
+    source_obj_attributes: props.EnumProperty(name="Transferable Attributes", items=populate_attribute_transfer_targets_enum)
     
 
 
@@ -686,7 +704,7 @@ class dNormsTools_OT_display_preview_material(bpy.types.Operator):
         if (previous_material != preview_material):
             context.object.dnorm_props.previous_material = previous_material
 
-        print("The preview material '{}' is now displaying the attribute '{}'.".format(preview_material, target_attribute_name))
+        print("\nThe preview material '{}' is now displaying the attribute '{}'.".format(preview_material, target_attribute_name))
         return {'FINISHED'}
 
 
@@ -706,7 +724,7 @@ class dNormsTools_OT_restore_previous_material(bpy.types.Operator):
      
         restore_previous_material(context, previous_material)
 
-        print("The mesh's active material is now '{}'.".format(previous_material))
+        print("\nThe mesh's active material is now '{}'.".format(previous_material))
         return {'FINISHED'}
 
 
@@ -719,16 +737,42 @@ class dNormsTools_OT_attribute_transfer_vertex(bpy.types.Operator):
     
     @classmethod
     def poll(cls, context):
-        has_other_mesh = context.object.dnorm_props.other_mesh
-        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and has_other_mesh 
+        source_obj = context.object.dnorm_props.source_obj
+        target_attribute = context.object.dnorm_props.source_obj_attributes
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and source_obj and target_attribute != "None"
     
     def execute(self, context):
-        other_mesh = context.object.dnorm_props.other_mesh
-     
-        test_vertex_search(context, other_mesh)
+        source_obj = context.object.dnorm_props.source_obj
+        source_mesh = source_obj.data
+        target_attribute = context.object.dnorm_props.source_obj_attributes
 
-        print("Tested the Vertex Attribute Transfer function")
+        test_vertex_search(context, source_mesh, target_attribute)
+
+        print("\nTested the Vertex Attribute Transfer function")
         return {'FINISHED'}
+
+
+class dNormsTools_OT_attribute_transfer_face(bpy.types.Operator):
+    bl_idname = "dnorms_tools.attribute_transfer_face"
+    bl_label = "Transfer Attributes Between Meshes Based on Closest Face Interpolated"
+    bl_description = "..."
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        source_obj = context.object.dnorm_props.source_obj
+        target_attribute = context.object.dnorm_props.source_obj_attributes
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and source_obj and target_attribute != "None"
+    
+    def execute(self, context):
+        source_obj = context.object.dnorm_props.source_obj
+        target_attribute = context.object.dnorm_props.source_obj_attributes
+
+        test_face_search(context, source_obj, target_attribute)
+
+        print("\nTested the Face Attribute Transfer function")
+        return {'FINISHED'}
+
 
 
 # UI
@@ -844,8 +888,10 @@ class dNormsTools_panel(bpy.types.Panel):
         dNtoC_domain_text, dNtoC_domain_icon = fetch_domain_switch_info_for(obj, dNtoC_name)
         dNtoC_row.operator(dNormsTools_OT_switch_dNtoC_domain.bl_idname, text="", icon=dNtoC_domain_icon)
 
-        layout.prop(props, "other_mesh")
+        layout.prop(props, "source_obj")
+        layout.prop(props, "source_obj_attributes")
         layout.operator(dNormsTools_OT_attribute_transfer_vertex.bl_idname, text="Test Vertex Function")
+        layout.operator(dNormsTools_OT_attribute_transfer_face.bl_idname, text="Test Face Function")
         
 
 
@@ -881,6 +927,7 @@ def register_dnorm_tools():
     bpy.utils.register_class(dNormsTools_OT_display_preview_material)
     bpy.utils.register_class(dNormsTools_OT_restore_previous_material)
     bpy.utils.register_class(dNormsTools_OT_attribute_transfer_vertex)
+    bpy.utils.register_class(dNormsTools_OT_attribute_transfer_face)
     bpy.utils.register_class(dNormsTools_panel)
 
 
@@ -913,6 +960,7 @@ def unregister_dnorm_tools():
     bpy.utils.unregister_class(dNormsTools_OT_display_preview_material)
     bpy.utils.unregister_class(dNormsTools_OT_restore_previous_material)
     bpy.utils.unregister_class(dNormsTools_OT_attribute_transfer_vertex)
+    bpy.utils.unregister_class(dNormsTools_OT_attribute_transfer_face)
     bpy.utils.unregister_class(dNormsTools_panel)
 
 
@@ -1033,64 +1081,90 @@ def restore_previous_material(context, previous_material):
 
 
 
+from .attribute_tools import (
+    group_attribute_values,
+    flatten_attribute_values,
+    populate_corner_attribute_values,
+    populate_point_attribute_values
+    )
+
+from mathutils.kdtree import KDTree
+from mathutils.bvhtree import BVHTree
+from mathutils.interpolate import poly_3d_calc
+
 
 # ATTRIBUTE TRANSFER
-def test_vertex_search(context, other_mesh):
+
+# TODO: do for a vertex group only
+# TODO: choose whether to keep original deltas, or retarget them to the current mesh's normals
+# TODO: how to handle hard edges? 
+
+# PER VERTEXs
+def test_vertex_search(context, source_mesh, target_attribute):
     obj = context.object
     mesh = obj.data
-    
+
+    # Get the source attribute in vertex mode.
+    source_attribute = source_mesh.attributes[target_attribute]
+    grouped_source_attribute = group_attribute_values(source_attribute, 'vector', 3)
+    if source_attribute.domain == 'CORNER':
+        grouped_source_attribute = populate_point_attribute_values(source_mesh, grouped_source_attribute)
+
+    # Get the target attribute in vertex mode.
+    if target_attribute in mesh.attributes:
+        mesh.attributes.remove(mesh.attributes[target_attribute])
+    mesh.attributes.new(target_attribute, 'FLOAT_VECTOR', 'POINT')
+
+    # Build the search tree.
+    tree_size = len(source_mesh.vertices)
+    kd_tree = KDTree(tree_size)
+    for vertex in source_mesh.vertices:
+        kd_tree.insert(vertex.co, vertex.index)
+    kd_tree.balance()
+    # TODO: should we put them in global space?
+
+    for vertex in mesh.vertices:
+        position, index, distance = kd_tree.find(vertex.co)
+        attribute_at_vertex = grouped_source_attribute[index]
+        mesh.attributes[target_attribute].data[vertex.index].vector = attribute_at_vertex
+        
+    obj.data.update()
 
 
-## COPY BETWEEN MESHES
+# PER FACE
+def test_face_search(context, source_obj, target_attribute):
+    obj = context.object
+    mesh = obj.data
+    source_mesh = source_obj.data
 
-# import mathutils
-# from mathutils import Vector
+    # Get the source attribute in vertex mode.
+    source_attribute = source_mesh.attributes[target_attribute]
+    grouped_source_attribute = group_attribute_values(source_attribute, 'vector', 3)
+    if source_attribute.domain == 'CORNER':
+        grouped_source_attribute = populate_point_attribute_values(source_mesh, grouped_source_attribute)
 
-# test_point = Vector([0.5, 0.25, 1.5])
+    # Get the target attribute in vertex mode.
+    if target_attribute in mesh.attributes:
+        mesh.attributes.remove(mesh.attributes[target_attribute])
+    mesh.attributes.new(target_attribute, 'FLOAT_VECTOR', 'POINT')
 
+    # Build the search tree.
+    bhv_tree = BVHTree.FromObject(source_obj, context.evaluated_depsgraph_get())
 
-# # VERTEX SEARCH STUFF
-# from mathutils.kdtree import KDTree
-# tree_size = len(mesh.vertices)
-# kd_tree = KDTree(tree_size)
-# for vertex in mesh.vertices:
-#     kd_tree.insert(vertex.co, vertex.index)
-# kd_tree.balance()
-# # TODO: check if they are in global space / work with other meshes.
+    for vertex in mesh.vertices:
+        position, normal, index, distance = bhv_tree.find_nearest(vertex.co)
+        
+        vertices = []
+        indices = []
+        for i in mesh.polygons[index].vertices:
+            vertices.append(mesh.vertices[i].co)   
+            indices.append(mesh.vertices[i].index)   
 
-# position, index, distance = kd_tree.find(test_point)
-# print("\nClosest vertex:")
-# print(position)
-# print(index)
-# print(distance)
-# print(mesh.vertices[index])
+        weights = poly_3d_calc(vertices, position)
 
+        interpolated_value = Vector([0.0, 0.0, 0.0])
+        for i, w in zip(indices, weights):
+            interpolated_value += Vector(grouped_source_attribute[i]) * w
+        mesh.attributes[target_attribute].data[vertex.index].vector = interpolated_value
 
-# # FACE SEARCH STUFF
-# from mathutils.bvhtree import BVHTree
-# bhv_tree = BVHTree.FromObject(obj, context.evaluated_depsgraph_get())
-
-# position, normal, index, distance = bhv_tree.find_nearest(test_point)
-# print("\nClosest face:")
-# print(position)
-# print(normal)
-# print(index)
-# print(distance)
-# print(mesh.polygons[index])
-# print(mesh.polygons[index].vertices)
-# print(mesh.polygons[index].loop_indices)
-
-# #hit = bhv_tree.ray_cast(test_point, position - test_point)
-# #print("\nRaycast hit:")
-# #print(hit)
-
-# vertices = []
-# for i in mesh.polygons[index].vertices:
-#     vertices.append(mesh.vertices[i].co)   
-# #print(vertices)
-
-# from mathutils.interpolate import poly_3d_calc
-# weight = poly_3d_calc(vertices, position)
-
-# print("\nResulting weight:")
-# print(weight)
+    obj.data.update()
