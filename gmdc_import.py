@@ -32,8 +32,7 @@ from .gmdc_tools import (
 	load_resource,
 	Vector,
 	Transform,
-	build_transform_tree,
-	convert_normal_to_color
+	build_transform_tree
 	)
 
 def popup_message(title, message, icon='NONE'):
@@ -303,16 +302,12 @@ def import_geometry(scene, geometry, settings):
 			obj.shape_key_add(name="Basis")
 
 
-			# Save the source normals as vertex colours for ease of preview.
+			# Save the source normals for ease of manipulation.
 			mesh = obj.data
 			
 			flat_N = [value for sublist in N for value in sublist]
 			mesh.attributes.new("OriginalNormals", 'FLOAT_VECTOR', 'POINT')
 			mesh.attributes["OriginalNormals"].data.foreach_set('vector', flat_N)
-			
-			mesh.color_attributes.new("OriginalNormals_AsColours", 'FLOAT_COLOR', 'POINT')
-			basis_normals_as_colors = [value for sublist in map(convert_normal_to_color, N) for value in sublist]
-			mesh.color_attributes["OriginalNormals_AsColours"].data.foreach_set('color_srgb', basis_normals_as_colors)
 
 
 			# TODO: see if we can create them as Corner attributes from the start.
@@ -335,10 +330,6 @@ def import_geometry(scene, geometry, settings):
 						name_dN = name + "_dN"
 						mesh.attributes.new(name_dN, 'FLOAT_VECTOR', 'POINT')
 
-						name_NtoC = name + "_NtoC"
-						mesh.color_attributes.new(name_NtoC, 'FLOAT_COLOR', 'POINT')
-						mesh.color_attributes[name_NtoC].data.foreach_set('color_srgb', basis_normals_as_colors)
-
 						# modify mesh with dV and dN
 						#
 						for i, key in used_keys:
@@ -348,13 +339,7 @@ def import_geometry(scene, geometry, settings):
 
 							if v:
 								block_verts[i].co+= BlenderVector(v[i])
-
 								mesh.attributes[name_dN].data[i].vector = n[i]
-
-								blended_normal = tuple(map(sum, zip(N[i], n[i])))
-								normal_as_color = convert_normal_to_color(blended_normal)
-								mesh.color_attributes[name_NtoC].data[i].color_srgb = normal_as_color
-
 					else:
 						# modify mesh with dV only
 						#
