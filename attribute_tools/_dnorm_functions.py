@@ -30,12 +30,11 @@ def original_to_current_normals(context, oN_attribute_name, masking_mode, vertex
 
     oN_attribute = mesh.attributes[oN_attribute_name]
     grouped_oN = group_attribute_values(oN_attribute, 'vector', 3)
+    if oN_attribute.domain == 'POINT':
+        grouped_oN = populate_corner_attribute_values(mesh, grouped_oN)
 
     if masking_mode != "None" and vertex_group_name != "None":
         vertex_group = obj.vertex_groups[vertex_group_name]
-
-        if oN_attribute.domain == 'POINT':
-            grouped_oN = populate_corner_attribute_values(mesh, grouped_oN)
 
         for loop in mesh.loops:
             original_normals = Vector(grouped_oN[loop.index])
@@ -57,10 +56,7 @@ def original_to_current_normals(context, oN_attribute_name, masking_mode, vertex
                 except:
                     pass
 
-    if oN_attribute.domain == 'CORNER':
-        mesh.normals_split_custom_set(grouped_oN)     
-    elif oN_attribute.domain == 'POINT':
-        mesh.normals_split_custom_set_from_vertices(grouped_oN)
+    mesh.normals_split_custom_set(grouped_oN)
 
     obj.data.update()
 
@@ -172,26 +168,19 @@ def original_plus_dN_to_current(context, dN_name, oN_attribute_name, masking_mod
     
     oN_attribute = mesh.attributes[oN_attribute_name]
     grouped_oN = group_attribute_values(oN_attribute, 'vector', 3)
+    if oN_attribute.domain == 'POINT':
+            grouped_oN = populate_corner_attribute_values(mesh, grouped_oN)
     dN_attribute = mesh.attributes[dN_name]
     grouped_dN = group_attribute_values(dN_attribute, 'vector', 3)
-
-    resulting_normals = []
-    if oN_attribute.domain == dN_attribute.domain == 'POINT':
-        resulting_normals = [clamp_vector(Vector(oNormal) + Vector(dNormal), -1.0, 1.0) for oNormal, dNormal in zip(grouped_oN, grouped_dN)]
-    else:
-        if oN_attribute.domain == 'POINT':
-            grouped_oN = populate_corner_attribute_values(mesh, grouped_oN)
-        if dN_attribute.domain == 'POINT':
+    if dN_attribute.domain == 'POINT':
             grouped_dN = populate_corner_attribute_values(mesh, grouped_dN)
-        resulting_normals = [clamp_vector(Vector(oNormal) + Vector(dNormal), -1.0, 1.0) for oNormal, dNormal in zip(grouped_oN, grouped_dN)]
+
+    resulting_normals = [clamp_vector(Vector(oNormal) + Vector(dNormal), -1.0, 1.0) for oNormal, dNormal in zip(grouped_oN, grouped_dN)]
 
     if masking_mode != "None" and vertex_group_name != "None":
         vertex_group = obj.vertex_groups[vertex_group_name]
 
         grouped_cN = [normal.vector for normal in mesh.corner_normals]
-
-        if oN_attribute.domain == 'POINT':
-            resulting_normals = populate_corner_attribute_values(mesh, resulting_normals)
 
         for loop in mesh.loops:
             current_normals = grouped_cN[loop.index]
@@ -213,10 +202,7 @@ def original_plus_dN_to_current(context, dN_name, oN_attribute_name, masking_mod
                 except:
                     pass
 
-    if oN_attribute.domain == 'CORNER':
-        mesh.normals_split_custom_set(resulting_normals)     
-    elif oN_attribute.domain == 'POINT':
-        mesh.normals_split_custom_set_from_vertices(resulting_normals)
+    mesh.normals_split_custom_set(resulting_normals)
 
     obj.data.update()
 
