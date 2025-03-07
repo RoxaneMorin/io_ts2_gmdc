@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 
-__all__ = ['convert_normal_to_color', 'update_currentNtoC', 'update_oNtoC', 'update_dNtoC', 'regenerate_currentNtoC', 'regenerate_oNtoC', 'regenerate_all_dNtoCs', 'regenerate_dNtoC', 'switch_color_attribute_domain']
+__all__ = ['convert_normal_to_color', 'update_currentNtoC', 'update_oNtoC', 'update_dNtoC', 'regenerate_allNtoC', 'regenerate_currentNtoC', 'regenerate_oNtoC', 'regenerate_all_dNtoCs', 'regenerate_dNtoC', 'switch_color_attribute_domain']
 
 #-------------------------------------------------------------------------------
 
@@ -73,6 +73,43 @@ def update_dNtoC(context, oN_attribute_name, dN_attribute_name, dNtoC_attribute_
         mesh.attributes[dNtoC_attribute_name].data[loop.index].color_srgb = color_normal
 
 
+def regenerate_allNtoC(context, currentNtoC_attribute_name, oN_attribute_name, oNtoC_attribute_name, key_names, dN_attribute_suffix, dNtoC_attribute_suffix):
+    obj = context.object
+    mesh = obj.data
+
+    log = []
+
+    if currentNtoC_attribute_name in mesh.attributes:
+        mesh.attributes.remove(mesh.attributes[currentNtoC_attribute_name])
+    mesh.attributes.new(currentNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+    
+    update_currentNtoC(context, currentNtoC_attribute_name)
+    log.append("- The attribute '{}' has been regenerated using the current mesh face normals.".format(currentNtoC_attribute_name))
+
+    if oN_attribute_name in mesh.attributes:
+        if oNtoC_attribute_name in mesh.attributes:
+            mesh.attributes.remove(mesh.attributes[oNtoC_attribute_name])
+        mesh.attributes.new(oNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+    
+        update_oNtoC(context, oN_attribute_name, oNtoC_attribute_name)
+        log.append("- The attribute '{}' has been regenerated using the current contents of '{}'.".format(oNtoC_attribute_name, oN_attribute_name))
+
+    for key_name in key_names:
+        dN_attribute_name = key_name + dN_attribute_suffix
+        if dN_attribute_name in mesh.attributes:
+
+            dNtoC_attribute_name = key_name + dNtoC_attribute_suffix
+            if dNtoC_attribute_name in mesh.attributes:
+                mesh.attributes.remove(mesh.attributes[dNtoC_attribute_name])
+            mesh.attributes.new(dNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+
+            update_dNtoC(context, oN_attribute_name, dN_attribute_name, dNtoC_attribute_name)
+            log.append("- The attribute '{}' has been regenerated using the current contents of '{}'.".format(dNtoC_attribute_name, dN_attribute_name))
+    
+    obj.data.update()
+    return log
+
+
 def regenerate_currentNtoC(context, currentNtoC_attribute_name):
     obj = context.object
     mesh = obj.data
@@ -105,13 +142,14 @@ def regenerate_all_dNtoCs(context, oN_attribute_name, key_names, dN_attribute_su
     
     for key_name in key_names:
         dN_attribute_name = key_name + dN_attribute_suffix
-        dNtoC_attribute_name = key_name + dNtoC_attribute_suffix
+        if dN_attribute_name in mesh.attributes:
 
-        if dNtoC_attribute_name in mesh.attributes:
-            mesh.attributes.remove(mesh.attributes[dNtoC_attribute_name])
-        mesh.attributes.new(dNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
+            dNtoC_attribute_name = key_name + dNtoC_attribute_suffix
+            if dNtoC_attribute_name in mesh.attributes:
+                mesh.attributes.remove(mesh.attributes[dNtoC_attribute_name])
+            mesh.attributes.new(dNtoC_attribute_name, 'FLOAT_COLOR', 'CORNER')
 
-        update_dNtoC(context, oN_attribute_name, dN_attribute_name, dNtoC_attribute_name)
+            update_dNtoC(context, oN_attribute_name, dN_attribute_name, dNtoC_attribute_name)
     
     obj.data.update()
 
