@@ -11,6 +11,9 @@ from .attribute_tools import (
     original_plus_dN_to_current,
     set_dN_from_current_vs_original,
     retarget_dN_to_current_normals,
+    transfer_attribute_via_topology,
+    transfer_attribute_via_nearest_vertex,
+    transfer_attribute_via_nearest_surface,
     clear_dNorms,
     update_currentNtoC,
     update_oNtoC,
@@ -187,7 +190,7 @@ def is_valid_source_object(context, source_obj):
     obj = context.id_data
     return source_obj.data != obj.data
 
-def populate_attribute_transfer_targets_enum(self, context):
+def populate_attribute_transfer_sources_enum(self, context):
     source_obj = context.object.dnorm_props.source_obj
     
     if source_obj != None:
@@ -205,6 +208,16 @@ def populate_attribute_transfer_targets_enum(self, context):
             return [("None", "None", "No valid attribute exists.")]
     else:
         return [("None", "None", "No valid attribute exists.")]
+
+def populate_attribute_transfer_dest_enum(self, context):
+    dest_obj = context.object
+    source_obj = context.object.dnorm_props.source_obj
+    
+    targets = [(oN_attribute_name, oN_attribute_name, "The mesh's original normal attribute.")]
+    if dest_obj.data.shape_keys:
+        targets.extend([(key.name + dN_attribute_suffix, key.name + dN_attribute_suffix, "") for key in dest_obj.data.shape_keys.key_blocks[1:] if key.name != "::"])
+
+    return targets
 
 
 def on_preview_material_target_changed(self, context):
@@ -260,7 +273,10 @@ class dNormsTools_properties(types.PropertyGroup):
 
     # Attribute transfer
     source_obj : props.PointerProperty(name="Source Object", description="The source object/mesh to use", type=types.Object, poll=is_valid_source_object)
-    source_obj_attributes: props.EnumProperty(name="Transferable Attributes", description="The attribute to transfer", items=populate_attribute_transfer_targets_enum)
+    source_obj_attributes: props.EnumProperty(name="Transferable Attributes", description="The attribute to transfer", items=populate_attribute_transfer_sources_enum)
+    dest_obj_attributes: props.EnumProperty(name="Destination Attribute", description="The destination attribute to create or overwrite", items=populate_attribute_transfer_dest_enum)
+    retargeting_mode_source: props.EnumProperty(name="Retargeting Mode Source", items=[("Original Normals", "Original Normals", "Retarget the attribute by referencing the source mesh's original normals."), ("Current Normals", "Current Normals", "Retarget the attribute by referencing the source mesh's current normals.")])
+    retargeting_mode_dest: props.EnumProperty(name="Retargeting Mode Target", items=[("None", "None", "Copy the attribute as is."), ("Original Normals", "Original Normals", "If applicable, retarget the attribute to this mesh's original normals."), ("Current Normals", "Current Normals", "If applicable, retarget the attribute to this mesh's current normals.")])
  
     # Behind the scenes
     oN_attribute: props.BoolProperty(name="Original Normals Attribute", get=has_oN_attribute)
@@ -644,6 +660,91 @@ class dNormsTools_OT_clear_dN(bpy.types.Operator):
         return {'FINISHED'}
 
 
+# ATTRIBUTE TRANSFER
+class dNormsTools_OT_attribute_transfer_topology(bpy.types.Operator):
+    bl_idname = "dnorms_tools.attribute_transfer_topology"
+    bl_label = "Transfer Attributes Between Meshes Based on Topology"
+    bl_description = "Assuming they have the same vertex count and order, transfer the target attribute from the source mesh to this one following their topology"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        source_obj = context.object.dnorm_props.source_obj
+        target_attribute = context.object.dnorm_props.source_obj_attributes
+        if source_obj and target_attribute != "None":
+            source_mesh = source_obj.data
+            target_mesh = context.view_layer.objects.active.data
+            same_topology = len(source_mesh.vertices) == len(target_mesh.vertices)
+            return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and source_obj and same_topology
+        else:
+            return False
+        
+    def execute(self, context):
+        source_obj = context.object.dnorm_props.source_obj
+        source_mesh = source_obj.data
+        source_attribute_name = context.object.dnorm_props.source_obj_attributes
+        dest_attribute_name = context.object.dnorm_props.dest_obj_attributes
+        masking_mode = context.object.dnorm_props.masking_mode
+        vertex_group_name = context.object.dnorm_props.vertex_groups
+        retargeting_mode_source = context.object.dnorm_props.retargeting_mode_source
+        retargeting_mode_dest = context.object.dnorm_props.retargeting_mode_dest
+        transfer_attribute_via_topology(context, source_mesh, source_attribute_name, dest_attribute_name, oN_attribute_name, masking_mode, vertex_group_name, retargeting_mode_source, retargeting_mode_dest)
+
+        print("\nThe attribute '{}' was copied from the object '{}' using the topology method.".format(source_attribute_name, source_obj))
+        return {'FINISHED'}
+
+class dNormsTools_OT_attribute_transfer_vertex(bpy.types.Operator):
+    bl_idname = "dnorms_tools.attribute_transfer_vertex"
+    bl_label = "Transfer Attributes Between Meshes Based on Closest Vertex"
+    bl_description = "Transfer the target attribute from the source mesh to this one by matching closest vertices"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        source_obj = context.object.dnorm_props.source_obj
+        target_attribute = context.object.dnorm_props.source_obj_attributes
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and source_obj and target_attribute != "None"
+    
+    def execute(self, context):
+        source_obj = context.object.dnorm_props.source_obj
+        source_attribute_name = context.object.dnorm_props.source_obj_attributes
+        dest_attribute_name = context.object.dnorm_props.dest_obj_attributes
+        masking_mode = context.object.dnorm_props.masking_mode
+        vertex_group_name = context.object.dnorm_props.vertex_groups
+        retargeting_mode_source = context.object.dnorm_props.retargeting_mode_source
+        retargeting_mode_dest = context.object.dnorm_props.retargeting_mode_dest
+        transfer_attribute_via_nearest_vertex(context, source_obj, source_attribute_name, dest_attribute_name, oN_attribute_name, masking_mode, vertex_group_name, retargeting_mode_source, retargeting_mode_dest)
+
+        print("\nThe attribute '{}' was copied from the object '{}' using the nearest vertex method.".format(source_attribute_name, source_obj))
+        return {'FINISHED'}
+
+
+class dNormsTools_OT_attribute_transfer_face(bpy.types.Operator):
+    bl_idname = "dnorms_tools.attribute_transfer_face"
+    bl_label = "Transfer Attributes Between Meshes Based on Closest Face Surface"
+    bl_description = "Transfer the target attribute from the source mesh to this one by interpolating from nearest surface points"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    @classmethod
+    def poll(cls, context):
+        source_obj = context.object.dnorm_props.source_obj
+        target_attribute = context.object.dnorm_props.source_obj_attributes
+        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and source_obj and target_attribute != "None"
+    
+    def execute(self, context):
+        source_obj = context.object.dnorm_props.source_obj
+        source_attribute_name = context.object.dnorm_props.source_obj_attributes
+        dest_attribute_name = context.object.dnorm_props.dest_obj_attributes
+        masking_mode = context.object.dnorm_props.masking_mode
+        vertex_group_name = context.object.dnorm_props.vertex_groups
+        retargeting_mode_source = context.object.dnorm_props.retargeting_mode_source
+        retargeting_mode_dest = context.object.dnorm_props.retargeting_mode_dest
+        transfer_attribute_via_nearest_surface(context, source_obj, source_attribute_name, dest_attribute_name, oN_attribute_name, masking_mode, vertex_group_name, retargeting_mode_source, retargeting_mode_dest)
+
+        print("\nThe attribute '{}' was copied from the object '{}' using the nearest surface method.".format(source_attribute_name, source_obj))
+        return {'FINISHED'}
+
+
 # SWITCH DOMAINS
 class dNormsTools_OT_switch_oN_domain(bpy.types.Operator):
     bl_idname = "dnorms_tools.change_on_domain"
@@ -740,87 +841,6 @@ class dNormsTools_OT_switch_dNtoC_domain(bpy.types.Operator):
         
         print("\nChanged the domain of the attribute '{}' from {} to {}.".format(dNtoC_name, initial_domain, resulting_domain))
         return {'FINISHED'}
-
-
-
-
-
-# ATTRIBUTE TRANSFER
-class dNormsTools_OT_attribute_transfer_topology(bpy.types.Operator):
-    bl_idname = "dnorms_tools.attribute_transfer_topology"
-    bl_label = "Transfer Attributes Between Meshes Based on Topology"
-    bl_description = "Assuming they have the same vertex count and order, transfer the target attribute from the source mesh to this one following their topology"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    @classmethod
-    def poll(cls, context):
-        source_obj = context.object.dnorm_props.source_obj
-        target_attribute = context.object.dnorm_props.source_obj_attributes
-        if source_obj and target_attribute != "None":
-            source_mesh = source_obj.data
-            target_mesh = context.view_layer.objects.active.data
-            same_topology = len(source_mesh.vertices) == len(target_mesh.vertices)
-            return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and source_obj and same_topology
-        else:
-            return False
-        
-    def execute(self, context):
-        source_obj = context.object.dnorm_props.source_obj
-        source_mesh = source_obj.data
-        target_attribute = context.object.dnorm_props.source_obj_attributes
-        masking_mode = context.object.dnorm_props.masking_mode
-        vertex_group_name = context.object.dnorm_props.vertex_groups
-        transfer_attribute_via_topology(context, source_mesh, target_attribute, masking_mode, vertex_group_name)
-
-        print("\nThe attribute '{}' was copied from the object '{}' using the topology method.".format(target_attribute, source_obj))
-        return {'FINISHED'}
-
-class dNormsTools_OT_attribute_transfer_vertex(bpy.types.Operator):
-    bl_idname = "dnorms_tools.attribute_transfer_vertex"
-    bl_label = "Transfer Attributes Between Meshes Based on Closest Vertex"
-    bl_description = "Transfer the target attribute from the source mesh to this one by matching closest vertices"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    @classmethod
-    def poll(cls, context):
-        source_obj = context.object.dnorm_props.source_obj
-        target_attribute = context.object.dnorm_props.source_obj_attributes
-        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and source_obj and target_attribute != "None"
-    
-    def execute(self, context):
-        source_obj = context.object.dnorm_props.source_obj
-        source_mesh = source_obj.data
-        target_attribute = context.object.dnorm_props.source_obj_attributes
-        masking_mode = context.object.dnorm_props.masking_mode
-        vertex_group_name = context.object.dnorm_props.vertex_groups
-        transfer_attribute_via_nearest_vertex(context, source_mesh, target_attribute, masking_mode, vertex_group_name)
-
-        print("\nThe attribute '{}' was copied from the object '{}' using the nearest vertex method.".format(target_attribute, source_obj))
-        return {'FINISHED'}
-
-
-class dNormsTools_OT_attribute_transfer_face(bpy.types.Operator):
-    bl_idname = "dnorms_tools.attribute_transfer_face"
-    bl_label = "Transfer Attributes Between Meshes Based on Closest Face Surface"
-    bl_description = "Transfer the target attribute from the source mesh to this one by interpolating from nearest surface points"
-    bl_options = {'REGISTER', 'UNDO'}
-    
-    @classmethod
-    def poll(cls, context):
-        source_obj = context.object.dnorm_props.source_obj
-        target_attribute = context.object.dnorm_props.source_obj_attributes
-        return bpy.context.object.mode == "OBJECT" and context.view_layer.objects.active.type == "MESH" and source_obj and target_attribute != "None"
-    
-    def execute(self, context):
-        source_obj = context.object.dnorm_props.source_obj
-        target_attribute = context.object.dnorm_props.source_obj_attributes
-        masking_mode = context.object.dnorm_props.masking_mode
-        vertex_group_name = context.object.dnorm_props.vertex_groups
-        transfer_attribute_via_nearest_surface(context, source_obj, target_attribute, masking_mode, vertex_group_name)
-
-        print("\nThe attribute '{}' was copied from the object '{}' using the nearest surface method.".format(target_attribute, source_obj))
-        return {'FINISHED'}
-
 
 
 # UI
@@ -942,14 +962,23 @@ class dNormsTools_panel(bpy.types.Panel):
         mesh_transfer_box = attribute_box.box()
         mesh_transfer_row = mesh_transfer_box.row()
         mesh_transfer_row.label(text="Attribute Transfer", icon='MOD_DATA_TRANSFER')
-        mesh_transfer_row.prop(props, "source_obj", text="source")
 
-        mesh_transfer_box.prop(props, "source_obj_attributes", icon='GROUP_VCOL')
+
+        mesh_transfer_source_column = mesh_transfer_row.column()
+
+        mesh_transfer_source_column.prop(props, "source_obj", text="source")
+
+        mesh_transfer_box.prop(props, "source_obj_attributes", text="source attribute", icon='GROUP_VCOL')
+        mesh_transfer_box.prop(props, "dest_obj_attributes", text="dest attribute", icon='GROUP_VCOL')
+
+        # add dest_attribute
+
+        mesh_transfer_box.prop(props, "retargeting_mode_source", text="Retargeting Mode Source", icon='ORIENTATION_GIMBAL')
+        mesh_transfer_box.prop(props, "retargeting_mode_dest", text="Retargeting Mode Target", icon='ORIENTATION_GIMBAL')
+
         mesh_transfer_box.operator(dNormsTools_OT_attribute_transfer_topology.bl_idname, text="Transfer via Topology", icon='SNAP_GRID')
         mesh_transfer_box.operator(dNormsTools_OT_attribute_transfer_vertex.bl_idname, text="Transfer via Nearest Vertex", icon='SNAP_VERTEX')
         mesh_transfer_box.operator(dNormsTools_OT_attribute_transfer_face.bl_idname, text="Transfer via Nearest Face Interpolated", icon='SNAP_FACE_CENTER')
-        
-
 
 
 
@@ -1149,202 +1178,3 @@ def restore_previous_material(context, previous_material):
 
     obj.active_material = previous_material
     obj.data.update()
-
-
-
-from .attribute_tools import (
-    group_attribute_values,
-    flatten_attribute_values,
-    populate_corner_attribute_values,
-    populate_point_attribute_values
-    )
-
-from mathutils.kdtree import KDTree
-from mathutils.bvhtree import BVHTree
-from mathutils.interpolate import poly_3d_calc
-
-
-# ATTRIBUTE TRANSFER
-
-# TOPOLOGY
-def transfer_attribute_via_topology(context, source_mesh, target_attribute_name, masking_mode, vertex_group_name):
-    obj = context.object
-    mesh = obj.data
-
-    source_attribute = source_mesh.attributes[target_attribute_name]
-    grouped_source_attribute = group_attribute_values(source_attribute, 'vector', 3)
-    if source_attribute.domain == 'POINT':
-        grouped_source_attribute = populate_corner_attribute_values(mesh, grouped_source_attribute)
-
-    if masking_mode != "None" and vertex_group_name != "None":
-        if target_attribute_name in mesh.attributes:
-            my_attribute = mesh.attributes[target_attribute_name]
-            grouped_my_attribute = group_attribute_values(my_attribute, 'vector', 3)
-
-            if my_attribute.domain == 'POINT':
-                grouped_my_attribute = populate_corner_attribute_values(mesh, grouped_my_attribute)
-
-            vertex_group = obj.vertex_groups[vertex_group_name]
-
-            for loop in mesh.loops:
-                source_value = Vector(grouped_source_attribute[loop.index])
-                my_value = Vector(grouped_my_attribute[loop.index])
-
-                if masking_mode == "Only":
-                    try:
-                        vertex_weight = vertex_group.weight(loop.vertex_index)
-                        blended_value = my_value.lerp(source_value, vertex_weight)
-                        grouped_source_attribute[loop.index] = blended_value
-                    except:
-                        grouped_source_attribute[loop.index] = my_value
-
-                elif masking_mode == "Excluding":
-                    try:
-                        vertex_weight = vertex_group.weight(loop.vertex_index)
-                        blended_value = source_value.lerp(my_value, vertex_weight)
-                        grouped_source_attribute[loop.index] = blended_value
-                    except:
-                        pass
-                
-    flat_source_attribute = flatten_attribute_values(grouped_source_attribute)
-    if target_attribute_name in mesh.attributes:
-       mesh.attributes.remove(mesh.attributes[target_attribute_name])
-    mesh.attributes.new(target_attribute_name, 'FLOAT_VECTOR', 'CORNER')
-    mesh.attributes[target_attribute_name].data.foreach_set('vector', flat_source_attribute)
-
-    obj.data.update()
-
-# NEAREST VERTEX
-def transfer_attribute_via_nearest_vertex(context, source_mesh, target_attribute_name, masking_mode, vertex_group_name):
-    obj = context.object
-    mesh = obj.data
-
-    source_attribute = source_mesh.attributes[target_attribute_name]
-    grouped_source_attribute = group_attribute_values(source_attribute, 'vector', 3)
-    if source_attribute.domain == 'CORNER':
-        grouped_source_attribute = populate_point_attribute_values(source_mesh, grouped_source_attribute)
-
-    # Build the search tree.
-    tree_size = len(source_mesh.vertices)
-    kd_tree = KDTree(tree_size)
-    for vertex in source_mesh.vertices:
-        kd_tree.insert(vertex.co, vertex.index)
-    kd_tree.balance()
-    # TODO: should we put them in global space?
-
-    collected_attributes = []
-    for vertex in mesh.vertices:
-        position, index, distance = kd_tree.find(vertex.co)
-        attribute_at_vertex = grouped_source_attribute[index]
-        collected_attributes.append(attribute_at_vertex)
-
-    if masking_mode != "None" and vertex_group_name != "None":
-        if target_attribute_name in mesh.attributes:
-            my_attribute = mesh.attributes[target_attribute_name]
-            grouped_my_attribute = group_attribute_values(my_attribute, 'vector', 3)
-            if my_attribute.domain == 'CORNER':
-                grouped_my_attribute = populate_point_attribute_values(source_mesh, grouped_my_attribute)
-
-            vertex_group = obj.vertex_groups[vertex_group_name]
-
-            for vertex in mesh.vertices:
-                collected_value = Vector(collected_attributes[vertex.index])
-                my_value = Vector(grouped_my_attribute[vertex.index])
-
-                if masking_mode == "Only":
-                    try:
-                        vertex_weight = vertex_group.weight(vertex.index)
-                        blended_value = my_value.lerp(collected_value, vertex_weight)
-                        collected_attributes[vertex.index] = blended_value
-                    except:
-                        collected_attributes[vertex.index] = my_value
-
-                elif masking_mode == "Excluding":
-                    try:
-                        vertex_weight = vertex_group.weight(vertex.index)
-                        blended_value = collected_value.lerp(my_value, vertex_weight)
-                        collected_attributes[vertex.index] = blended_value
-                    except:
-                        pass
-    
-    flat_collected_attribute = flatten_attribute_values(collected_attributes)
-    if target_attribute_name in mesh.attributes:
-       mesh.attributes.remove(mesh.attributes[target_attribute_name])
-    mesh.attributes.new(target_attribute_name, 'FLOAT_VECTOR', 'POINT')
-    mesh.attributes[target_attribute_name].data.foreach_set('vector', flat_collected_attribute)
-
-    obj.data.update()
-
-
-# NEAREST SURFACE / POINT ON FACE
-def transfer_attribute_via_nearest_surface(context, source_obj, target_attribute_name,  masking_mode, vertex_group_name):
-    obj = context.object
-    mesh = obj.data
-    source_mesh = source_obj.data
-
-    source_attribute = source_mesh.attributes[target_attribute_name]
-    grouped_source_attribute = group_attribute_values(source_attribute, 'vector', 3)
-    if source_attribute.domain == 'CORNER':
-        grouped_source_attribute = populate_point_attribute_values(source_mesh, grouped_source_attribute)
-
-    # Build the search tree.
-    bhv_tree = BVHTree.FromObject(source_obj, context.evaluated_depsgraph_get())
-    # TODO: check whether it's in global space
-
-    collected_attributes = []
-    for vertex in mesh.vertices:
-        position, normal, index, distance = bhv_tree.find_nearest(vertex.co)
-        
-        vertices = []
-        indices = []
-        for i in mesh.polygons[index].vertices:
-            vertices.append(mesh.vertices[i].co)   
-            indices.append(mesh.vertices[i].index)   
-
-        weights = poly_3d_calc(vertices, position)
-        interpolated_value = Vector([0.0, 0.0, 0.0])
-        for i, w in zip(indices, weights):
-            interpolated_value += Vector(grouped_source_attribute[i]) * w
-        collected_attributes.append(interpolated_value)
-
-    if masking_mode != "None" and vertex_group_name != "None":
-        if target_attribute_name in mesh.attributes:
-            my_attribute = mesh.attributes[target_attribute_name]
-            grouped_my_attribute = group_attribute_values(my_attribute, 'vector', 3)
-            if my_attribute.domain == 'CORNER':
-                grouped_my_attribute = populate_point_attribute_values(source_mesh, grouped_my_attribute)
-
-            vertex_group = obj.vertex_groups[vertex_group_name]
-
-            for vertex in mesh.vertices:
-                collected_value = Vector(collected_attributes[vertex.index])
-                my_value = Vector(grouped_my_attribute[vertex.index])
-
-                if masking_mode == "Only":
-                    try:
-                        vertex_weight = vertex_group.weight(vertex.index)
-                        blended_value = my_value.lerp(collected_value, vertex_weight)
-                        collected_attributes[vertex.index] = blended_value
-                    except:
-                        collected_attributes[vertex.index] = my_value
-
-                elif masking_mode == "Excluding":
-                    try:
-                        vertex_weight = vertex_group.weight(vertex.index)
-                        blended_value = collected_value.lerp(my_value, vertex_weight)
-                        collected_attributes[vertex.index] = blended_value
-                    except:
-                        pass
-    
-    flat_collected_attribute = flatten_attribute_values(collected_attributes)
-    if target_attribute_name in mesh.attributes:
-       mesh.attributes.remove(mesh.attributes[target_attribute_name])
-    mesh.attributes.new(target_attribute_name, 'FLOAT_VECTOR', 'POINT')
-    mesh.attributes[target_attribute_name].data.foreach_set('vector', flat_collected_attribute)
-
-    obj.data.update()
-
-
-
-# TODO: choose whether to keep original deltas, or retarget them to the current mesh's normals
-# Second 'transfer and retarget' operation?

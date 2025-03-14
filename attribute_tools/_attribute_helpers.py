@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 
-__all__ = ['clamp_vector', 'group_attribute_values', 'flatten_attribute_values', 'populate_corner_attribute_values', 'populate_point_attribute_values']
+__all__ = ['clamp_vector', 'round_vector', 'group_attribute_values', 'flatten_attribute_values', 'populate_corner_attribute_values', 'populate_point_attribute_values']
 
 #-------------------------------------------------------------------------------
 
@@ -10,7 +10,13 @@ from bl_math import clamp
 
 
 def clamp_vector(vector, min_value, max_value):
-    return Vector([clamp(value, min_value, max_value) for value in vector])
+    clamped_vector = Vector([clamp(value, min_value, max_value) for value in vector])
+    return clamped_vector
+
+
+def round_vector(vector, ndigits):
+    rounded_vector = Vector([round(value, ndigits) for value in vector])
+    return rounded_vector
 
 
 def group_attribute_values(attribute, value_type, group_length):
@@ -48,6 +54,7 @@ def populate_point_attribute_values(mesh, grouped_corner_attribute):
         accumulated_values = [sum(values) for values in zip(*values_per_vertex[vertex.index])]
         new_value = [value/value_count for value in accumulated_values]
         point_attribute.append(new_value)
+
     return point_attribute
 
 
