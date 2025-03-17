@@ -1,4 +1,4 @@
-
+﻿
 import bpy
 from bpy import context, types, props
 import mathutils
@@ -960,21 +960,27 @@ class dNormsTools_panel(bpy.types.Panel):
  
         # Subsection: attribute transfer
         mesh_transfer_box = attribute_box.box()
+        mesh_transfer_box.label(text="Attribute Transfer", icon='MOD_DATA_TRANSFER')
+
         mesh_transfer_row = mesh_transfer_box.row()
-        mesh_transfer_row.label(text="Attribute Transfer", icon='MOD_DATA_TRANSFER')
+        mesh_transfer_source_column = mesh_transfer_row.column();
+        mesh_transfer_dest_column = mesh_transfer_row.column();
+
+        
 
 
-        mesh_transfer_source_column = mesh_transfer_row.column()
 
         mesh_transfer_source_column.prop(props, "source_obj", text="source")
+        mesh_transfer_source_column.prop(props, "source_obj_attributes", text="source", icon='GROUP_VCOL')
+        mesh_transfer_source_column.prop(props, "retargeting_mode_source", text="source", icon='ORIENTATION_GIMBAL')
 
-        mesh_transfer_box.prop(props, "source_obj_attributes", text="source attribute", icon='GROUP_VCOL')
-        mesh_transfer_box.prop(props, "dest_obj_attributes", text="dest attribute", icon='GROUP_VCOL')
 
-        # add dest_attribute
+        mesh_transfer_dest_column.separator(factor=0.5)
+        mesh_transfer_dest_column.prop(props, "dest_obj_attributes", text="→", icon='GROUP_VCOL')
+        mesh_transfer_dest_column.prop(props, "retargeting_mode_dest", text="→", icon='ORIENTATION_GIMBAL')
 
-        mesh_transfer_box.prop(props, "retargeting_mode_source", text="Retargeting Mode Source", icon='ORIENTATION_GIMBAL')
-        mesh_transfer_box.prop(props, "retargeting_mode_dest", text="Retargeting Mode Target", icon='ORIENTATION_GIMBAL')
+
+
 
         mesh_transfer_box.operator(dNormsTools_OT_attribute_transfer_topology.bl_idname, text="Transfer via Topology", icon='SNAP_GRID')
         mesh_transfer_box.operator(dNormsTools_OT_attribute_transfer_vertex.bl_idname, text="Transfer via Nearest Vertex", icon='SNAP_VERTEX')
@@ -1009,17 +1015,16 @@ def register_dnorm_tools():
     bpy.utils.register_class(dNormsTools_OT_retarget_dN_to_current)
     bpy.utils.register_class(dNormsTools_OT_clear_dN)
 
+    bpy.utils.register_class(dNormsTools_OT_attribute_transfer_topology)
+    bpy.utils.register_class(dNormsTools_OT_attribute_transfer_vertex)
+    bpy.utils.register_class(dNormsTools_OT_attribute_transfer_face)
+
     bpy.utils.register_class(dNormsTools_OT_switch_oN_domain)
     bpy.utils.register_class(dNormsTools_OT_switch_dN_domain)
     bpy.utils.register_class(dNormsTools_OT_switch_currentNtoC_domain)
     bpy.utils.register_class(dNormsTools_OT_switch_oNtoC_domain)
     bpy.utils.register_class(dNormsTools_OT_switch_dNtoC_domain)
-    
-    
-    
-    bpy.utils.register_class(dNormsTools_OT_attribute_transfer_topology)
-    bpy.utils.register_class(dNormsTools_OT_attribute_transfer_vertex)
-    bpy.utils.register_class(dNormsTools_OT_attribute_transfer_face)
+
     bpy.utils.register_class(dNormsTools_panel)
 
 
@@ -1049,18 +1054,16 @@ def unregister_dnorm_tools():
     bpy.utils.unregister_class(dNormsTools_OT_retarget_dN_to_current)
     bpy.utils.unregister_class(dNormsTools_OT_clear_dN)
 
+    bpy.utils.unregister_class(dNormsTools_OT_attribute_transfer_topology)
+    bpy.utils.unregister_class(dNormsTools_OT_attribute_transfer_vertex)
+    bpy.utils.unregister_class(dNormsTools_OT_attribute_transfer_face)
+
     bpy.utils.unregister_class(dNormsTools_OT_switch_oN_domain)
     bpy.utils.unregister_class(dNormsTools_OT_switch_dN_domain)
     bpy.utils.unregister_class(dNormsTools_OT_switch_currentNtoC_domain)
     bpy.utils.unregister_class(dNormsTools_OT_switch_oNtoC_domain)
     bpy.utils.unregister_class(dNormsTools_OT_switch_dNtoC_domain)
-    
-    
-    
-    
-    bpy.utils.unregister_class(dNormsTools_OT_attribute_transfer_topology)
-    bpy.utils.unregister_class(dNormsTools_OT_attribute_transfer_vertex)
-    bpy.utils.unregister_class(dNormsTools_OT_attribute_transfer_face)
+
     bpy.utils.unregister_class(dNormsTools_panel)
 
 
