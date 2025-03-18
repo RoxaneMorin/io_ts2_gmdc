@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------------
 
-__all__ = ['clamp_vector', 'round_vector', 'group_attribute_values', 'flatten_attribute_values', 'populate_corner_attribute_values', 'populate_point_attribute_values']
+__all__ = ['clamp_vector', 'zero_out_small_vector', 'group_attribute_values', 'flatten_attribute_values', 'populate_corner_attribute_values', 'populate_point_attribute_values']
 
 #-------------------------------------------------------------------------------
 
@@ -14,9 +14,12 @@ def clamp_vector(vector, min_value, max_value):
     return clamped_vector
 
 
-def round_vector(vector, ndigits):
-    rounded_vector = Vector([round(value, ndigits) for value in vector])
-    return rounded_vector
+def zero_out_small_vector(vector, smallest_value):
+    for i in range(0, len(vector)):
+        if vector[i] > -smallest_value and vector[i] < smallest_value:
+            vector[i] = 0
+
+    return vector
 
 
 def group_attribute_values(attribute, value_type, group_length):
@@ -35,6 +38,7 @@ def populate_corner_attribute_values(mesh, grouped_point_attribute):
     corner_attribute = []
     for loop in mesh.loops:
         corner_attribute.append(grouped_point_attribute[loop.vertex_index])
+
     return corner_attribute
 
 

@@ -16,7 +16,8 @@ from ._attribute_helpers import (
     group_attribute_values,
     flatten_attribute_values,
     populate_corner_attribute_values,
-    populate_point_attribute_values
+    populate_point_attribute_values,
+    zero_out_small_vector
     )
 
 
@@ -209,8 +210,6 @@ def original_plus_dN_to_current(context, dN_name, oN_attribute_name, masking_mod
     obj.data.update()
 
 
-# TODO: set too small values to zero?
-
 # SAVE ATTRIBUTE
 def set_dN_from_current_vs_original(context, dN_name, oN_attribute_name, masking_mode, vertex_group_name):
     obj = context.object
@@ -226,9 +225,8 @@ def set_dN_from_current_vs_original(context, dN_name, oN_attribute_name, masking
     if oN_attribute.domain == 'POINT':
         grouped_oN = populate_corner_attribute_values(mesh, grouped_oN)
 
-    resulting_deltas = [cNormal - Vector(oNormal) for cNormal, oNormal in zip(grouped_cN, grouped_oN)]
-
-    print(resulting_deltas)
+    # Ensure that the deltas don't have uselessly small values.
+    resulting_deltas = [zero_out_small_vector(cNormal - Vector(oNormal), 0.001) for cNormal, oNormal in zip(grouped_cN, grouped_oN)]
 
     if dN_name in mesh.attributes:
         dN_attribute = mesh.attributes[dN_name]
@@ -616,7 +614,6 @@ def transfer_attribute_via_nearest_surface(context, source_obj, source_attribute
 
     # Build the search tree.
     bhv_tree = BVHTree.FromObject(source_obj, context.evaluated_depsgraph_get())
-    # TODO: check whether it's in global space
 
     collected_attributes = []
     vertex_mapping = []
@@ -642,7 +639,7 @@ def transfer_attribute_via_nearest_surface(context, source_obj, source_attribute
 
     if masking_mode != "None" and vertex_group_name != "None" and dest_attribute_name in dest_mesh.attributes:
         collected_attributes = handle_masking_per_vertex(dest_obj, dest_mesh, masking_mode, vertex_group_name, dest_attribute_name, collected_attributes)
-    
+
     flat_collected_attribute = flatten_attribute_values(collected_attributes)
     if dest_attribute_name in dest_mesh.attributes:
        dest_mesh.attributes.remove(dest_mesh.attributes[dest_attribute_name])
