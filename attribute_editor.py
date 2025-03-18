@@ -254,7 +254,6 @@ def fetch_domain_switch_info_for(obj, attribute_name):
 
 
 
-
 # PROPERTIES
 class dNormsTools_properties(types.PropertyGroup):
     # General
@@ -843,6 +842,7 @@ class dNormsTools_OT_switch_dNtoC_domain(bpy.types.Operator):
         return {'FINISHED'}
 
 
+
 # UI
 class dNormsTools_panel(bpy.types.Panel):
     bl_idname = "OBJECT_PT_dNormsTools_panel"
@@ -908,8 +908,8 @@ class dNormsTools_panel(bpy.types.Panel):
         dNtoC_domain_text, dNtoC_domain_icon = fetch_domain_switch_info_for(obj, dNtoC_name)
         dNtoC_row.operator(dNormsTools_OT_switch_dNtoC_domain.bl_idname, text="", icon=dNtoC_domain_icon)
 
-
         # TODO: regenerate NtoCs upon operations?
+
 
         # Section: attributes
         attribute_box = layout.box()
@@ -943,7 +943,7 @@ class dNormsTools_panel(bpy.types.Panel):
 
         dN_label_row = dN_box.row()
         dN_label_row.label(text="Morph Normal Deltas", icon='ORIENTATION_NORMAL')
-        dN_label_row.prop(data=props, property="shape_keys_for_dN", text="target", icon='SHAPEKEY_DATA')
+        dN_label_row.prop(data=props, property="shape_keys_for_dN", text="target morph", icon='SHAPEKEY_DATA')
 
         dN_key_name = obj.dnorm_props.shape_keys_for_dN
         dN_name = dN_key_name + dN_attribute_suffix
@@ -960,27 +960,31 @@ class dNormsTools_panel(bpy.types.Panel):
  
         # Subsection: attribute transfer
         mesh_transfer_box = attribute_box.box()
-        mesh_transfer_box.label(text="Attribute Transfer", icon='MOD_DATA_TRANSFER')
+
+        mesh_trasfer_label_row = mesh_transfer_box.row()
+        mesh_trasfer_label_row.label(text="Attribute Transfer", icon='MOD_DATA_TRANSFER')
+        mesh_trasfer_label_row.prop(props, "source_obj", text="source mesh")
+
+        mesh_transfer_attribute_row = mesh_transfer_box.row()
+        mesh_transfer_attribute_row.prop(props, "source_obj_attributes", text="", icon='GROUP_VCOL')
+        mesh_transfer_attribute_row.label(icon='FORWARD');
+        mesh_transfer_attribute_row.prop(props, "dest_obj_attributes", text="", icon='GROUP_VCOL')
 
         mesh_transfer_row = mesh_transfer_box.row()
-        mesh_transfer_source_column = mesh_transfer_row.column();
-        mesh_transfer_dest_column = mesh_transfer_row.column();
 
-        
+        mesh_transfer_column_X = mesh_transfer_row.column()
+        mesh_transfer_column_X.prop_enum(props, "retargeting_mode_dest", "None", text="", icon='X')
 
+        mesh_transfer_column_source = mesh_transfer_row.column()
+        mesh_transfer_column_source.enabled = (context.object.dnorm_props.retargeting_mode_dest != "None")
+        mesh_transfer_column_source.label(text="Retarget Source Delta to:", icon='ORIENTATION_GIMBAL');
+        mesh_transfer_column_source.prop_enum(props, "retargeting_mode_source", "Original Normals", icon='EXPORT')
+        mesh_transfer_column_source.prop_enum(props, "retargeting_mode_source", "Current Normals", icon='SNAP_NORMAL')
 
-
-        mesh_transfer_source_column.prop(props, "source_obj", text="source")
-        mesh_transfer_source_column.prop(props, "source_obj_attributes", text="source", icon='GROUP_VCOL')
-        mesh_transfer_source_column.prop(props, "retargeting_mode_source", text="source", icon='ORIENTATION_GIMBAL')
-
-
-        mesh_transfer_dest_column.separator(factor=0.5)
-        mesh_transfer_dest_column.prop(props, "dest_obj_attributes", text="→", icon='GROUP_VCOL')
-        mesh_transfer_dest_column.prop(props, "retargeting_mode_dest", text="→", icon='ORIENTATION_GIMBAL')
-
-
-
+        mesh_transfer_column_dest = mesh_transfer_row.column()
+        mesh_transfer_column_dest.label(text="Retarget Destination Delta to:", icon='ORIENTATION_GIMBAL');
+        mesh_transfer_column_dest.prop_enum(props, "retargeting_mode_dest", "Original Normals", icon='EXPORT')
+        mesh_transfer_column_dest.prop_enum(props, "retargeting_mode_dest", "Current Normals", icon='SNAP_NORMAL')
 
         mesh_transfer_box.operator(dNormsTools_OT_attribute_transfer_topology.bl_idname, text="Transfer via Topology", icon='SNAP_GRID')
         mesh_transfer_box.operator(dNormsTools_OT_attribute_transfer_vertex.bl_idname, text="Transfer via Nearest Vertex", icon='SNAP_VERTEX')
