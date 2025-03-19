@@ -1,4 +1,4 @@
-## TS2 GMDC Importer/Exporter for Blender 2.80+
+## TS2 GMDC Importer/Exporter for Blender 3.60+
 
 This add-on supports rigging data, two UV layers, morphs, and bounding geometry.
 
@@ -22,8 +22,21 @@ Key features:
 * Morphs are imported as shape keys.
 * Inverse transforms from GMDC files are saved in scene properties. This data is used by the exporter and included into generated GMDC file.
 * Seams can be removed by geometry reindexing (the "Remove doubles" option).
+* Base normals are automatically imported as custom/per corner normals.
+* Morph normals and Pet EP data are imported as custom mesh attributes.
 
 [![Screenshot](images/thumb_image3.png "Screenshot")](images/image3.png)
 
+#### Exporting
+The exporter focuses on Geometry. 
+It can handle all imported data, including bone weights, morphs, per corner normals, and the GMDC format's custom data.
+
+Key features:
+* Options to export rigging data, normal tangents, Pet EP data, mesh morphs (and their normals).
+* "Align Normals" feature, which match base normals to that of a given other mesh.
+* Separate handling of bounding geometry, which must exist as its own mesh.
+* Option to write additional resouce info into the resulting GMDC, such as name and object properties.
+
 #### Links:
+* [DjAlex88's Original ModTheSims Post](https://modthesims.info/d/656032/the-sims-2-gmdc-importer-exporter-for-blender-2-80.html)
 * [Official Blender Website](https://www.blender.org/)
